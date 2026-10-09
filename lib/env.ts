@@ -24,6 +24,8 @@ export const env = {
   clerkSignUpFallbackRedirectUrl: need("NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL"),
   supabaseUrl: need("NEXT_PUBLIC_SUPABASE_URL"),
   supabasePublishableKey: need("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+  // Bypasses row-level security. Only the analysis run reads it.
+  supabaseSecretKey: need("SUPABASE_SECRET_KEY"),
 };
 
 if (missing.length > 0) {

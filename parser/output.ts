@@ -33,6 +33,14 @@ export function readResult(file: string): ParseResult {
 
 class ShapeError extends Error {}
 
+/**
+ * Checks a coverage report read back from wherever it was stored, field by
+ * field, the same way a whole result is checked.
+ */
+export function readCoverage(value: unknown): Coverage {
+  return toCoverage(value, "coverage");
+}
+
 type Obj = { [key: string]: unknown };
 
 function isObj(v: unknown): v is Obj {

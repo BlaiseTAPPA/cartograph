@@ -19,33 +19,48 @@ export type Database = {
     Tables: {
       analyses: {
         Row: {
+          adapter: string | null
           commit_sha: string | null
+          coverage: Json | null
           created_at: string
           error: string | null
           finished_at: string | null
           id: string
           org_id: string
           project_id: string
+          stage: Database["public"]["Enums"]["analysis_stage"] | null
+          stage_changed_at: string | null
+          stage_message: string | null
           status: Database["public"]["Enums"]["analysis_status"]
         }
         Insert: {
+          adapter?: string | null
           commit_sha?: string | null
+          coverage?: Json | null
           created_at?: string
           error?: string | null
           finished_at?: string | null
           id?: string
           org_id: string
           project_id: string
+          stage?: Database["public"]["Enums"]["analysis_stage"] | null
+          stage_changed_at?: string | null
+          stage_message?: string | null
           status?: Database["public"]["Enums"]["analysis_status"]
         }
         Update: {
+          adapter?: string | null
           commit_sha?: string | null
+          coverage?: Json | null
           created_at?: string
           error?: string | null
           finished_at?: string | null
           id?: string
           org_id?: string
           project_id?: string
+          stage?: Database["public"]["Enums"]["analysis_stage"] | null
+          stage_changed_at?: string | null
+          stage_message?: string | null
           status?: Database["public"]["Enums"]["analysis_status"]
         }
         Relationships: [
@@ -199,21 +214,30 @@ export type Database = {
       files: {
         Row: {
           analysis_id: string
+          hash: string | null
           id: string
+          lines: number | null
+          module: string
           org_id: string
           path: string
           skip_reason: string | null
         }
         Insert: {
           analysis_id: string
+          hash?: string | null
           id?: string
+          lines?: number | null
+          module: string
           org_id: string
           path: string
           skip_reason?: string | null
         }
         Update: {
           analysis_id?: string
+          hash?: string | null
           id?: string
+          lines?: number | null
+          module?: string
           org_id?: string
           path?: string
           skip_reason?: string | null
@@ -365,6 +389,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      analysis_stage: "fetch" | "select" | "parse" | "store"
       analysis_status: "queued" | "parsing" | "complete" | "failed"
       edge_kind: "import" | "re-export" | "dynamic-import" | "require"
     }
