@@ -6,14 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "parse": "node parser/cli/parse.ts",
+    "parse:read": "node parser/cli/read.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.13",
     "@supabase/supabase-js": "^2.117.3",
     "next": "16.4.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "ts-morph": "^28.0.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
