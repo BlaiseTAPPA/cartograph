@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { countByCategory } from "@/lib/categories";
 import { importedByNothing, mostDependedOn } from "@/lib/map/detail";
+import { INSIGHT_SENTENCES, type InsightFile } from "@/lib/map/insights";
+import { DEFAULT_DEPTH, walk, type Direction } from "@/lib/map/reach";
 import type { FileCategory } from "@/parser/adapter";
 import type { Coverage, ParsedFile } from "@/parser/types";
 import { SWATCH } from "./category-rail";
@@ -12,6 +14,21 @@ import { neighboursOf, useMapState } from "./map-state";
 const RANKED = 10;
 
 type Tab = "structure" | "explanation";
+
+/** Which walk is showing, and how deep. */
+type WalkState = { direction: Direction; depth: number } | null;
+
+const WALK_LABEL: Record<Direction, string> = {
+  dependents: "Blast radius",
+  dependencies: "Dependency chain",
+};
+const WALK_NOTE: Record<Direction, string> = {
+  dependents: "files that may break if this one changes",
+  dependencies: "files this one needs",
+};
+// One step is only the direct neighbours, already listed below; past three
+// most of a repository comes back.
+const DEPTHS = [1, 2, 3] as const;
 
 /**
  * Fills from the map's selection, entirely from data already in the browser.
@@ -23,6 +40,8 @@ export function DetailPane({ repo, gitRef, coverage }: { repo: string; gitRef: s
   // Held here, not per selection: whichever tab is open stays open as the
   // selection changes.
   const [tab, setTab] = useState<Tab>("structure");
+  // Kept across selections too, so a walk can be compared file to file.
+  const [walkState, setWalkState] = useState<WalkState>(null);
 
   if (selected === null) return <Summary repo={repo} gitRef={gitRef} coverage={coverage} />;
   if (selected.slot === null) {
@@ -34,7 +53,7 @@ export function DetailPane({ repo, gitRef, coverage }: { repo: string; gitRef: s
   }
   return (
     <Tabbed tab={tab} setTab={setTab} header={<FileHeader path={selected.slot} />} what="file">
-      <FileStructure path={selected.slot} />
+      <FileStructure path={selected.slot} walkState={walkState} setWalkState={setWalkState} />
     </Tabbed>
   );
 }
@@ -85,7 +104,9 @@ function Summary({ repo, gitRef, coverage }: { repo: string; gitRef: string; cov
   const { parsed, adapter } = useMapState();
   const ranked = mostDependedOn(parsed);
   const starts = importedByNothing(parsed);
-  const unclassified = countByCategory(parsed, adapter).find((c) => c.category === null)?.files ?? 0;
+  const counts = countByCategory(parsed, adapter);
+  const unclassified = counts.find((c) => c.category === null)?.files ?? 0;
+  const entries = counts.find((c) => c.category === "entry")?.files ?? 0;
 
   return (
     <div className="text-xs">
@@ -105,10 +126,10 @@ function Summary({ repo, gitRef, coverage }: { repo: string; gitRef: string; cov
           {coverage.imports.seen}
           <span className="text-muted">, {coverage.imports.resolved} to a file here</span>
         </Fact>
-        {/* No adapter here knows what a route looks like, so there's no count
-            to give. Absent beats approximate. */}
+        {/* Counted from Next.js file conventions matched by path: pages,
+            layouts and route handlers, the files a framework reaches by name. */}
         <Fact label="Routes">
-          <span className="text-muted">not detected without a framework</span>
+          {entries} <span className="text-muted">pages, layouts and handlers</span>
         </Fact>
         <Fact label="Unclassified">
           {unclassified} <span className="text-muted">files no convention identified</span>
@@ -121,6 +142,75 @@ function Summary({ repo, gitRef, coverage }: { repo: string; gitRef: string; cov
       <Section title={`Imported by nothing, ${starts.length}`} note="imports">
         <PathList paths={starts.slice(0, RANKED)} figure={(f) => f.fanOut} direction="out" />
       </Section>
+      <InsightsPanel />
+    </div>
+  );
+}
+
+/**
+ * Collapsed until asked for, and last in the summary: this explains a
+ * codebase, it doesn't open by grading one. Files nothing imports lead; loops
+ * and long files read closer to a verdict, so they come after.
+ */
+function InsightsPanel() {
+  const { insights, fileInfo } = useMapState();
+  const [open, setOpen] = useState(false);
+  const asFiles = (list: InsightFile[]) => list.flatMap((f) => fileInfo.get(f.path) ?? []);
+
+  return (
+    <section className="border-t border-line">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-7 w-full items-center gap-1.5 px-3 text-left text-[11px] text-muted hover:text-fg"
+      >
+        <span aria-hidden="true" className="w-2">
+          {open ? "▾" : "▸"}
+        </span>
+        Insights
+      </button>
+      {open && (
+        <div className="pb-2">
+          <InsightGroup sentence={INSIGHT_SENTENCES.unimported}>
+            <PathList paths={asFiles(insights.unimported)} />
+          </InsightGroup>
+          <InsightGroup sentence={INSIGHT_SENTENCES.cycle}>
+            {insights.cycles.length === 0 ? (
+              <p className="px-3 py-0.5 text-muted">None.</p>
+            ) : (
+              insights.cycles.map((loop) => (
+                <ol key={loop.join("\u0000")} className="mb-1.5">
+                  {loop.map((path) => (
+                    <li key={path}>
+                      <PathButton path={path} />
+                    </li>
+                  ))}
+                  {/* The loop closes on the file it started from. */}
+                  <li className="px-3 font-mono text-[11px] text-muted">
+                    back to {loop[0].slice(loop[0].lastIndexOf("/") + 1)}
+                  </li>
+                </ol>
+              ))
+            )}
+          </InsightGroup>
+          <InsightGroup sentence={INSIGHT_SENTENCES.heavilyImported}>
+            <PathList paths={asFiles(insights.heavilyImported)} figure={(f) => f.fanIn} direction="in" />
+          </InsightGroup>
+          <InsightGroup sentence={INSIGHT_SENTENCES.long}>
+            <PathList paths={asFiles(insights.long)} figure={(f) => f.lines} direction="none" />
+          </InsightGroup>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InsightGroup({ sentence, children }: { sentence: string; children: ReactNode }) {
+  return (
+    <div className="pt-1.5">
+      <p className="px-3 pb-0.5">{sentence}</p>
+      {children}
     </div>
   );
 }
@@ -133,7 +223,15 @@ function FileHeader({ path }: { path: string }) {
   );
 }
 
-function FileStructure({ path }: { path: string }) {
+function FileStructure({
+  path,
+  walkState,
+  setWalkState,
+}: {
+  path: string;
+  walkState: WalkState;
+  setWalkState: (w: WalkState) => void;
+}) {
   const { fileInfo, neighbours, adapter } = useMapState();
   const file = fileInfo.get(path);
   const { imports, importedBy } = neighboursOf(neighbours, path);
@@ -157,6 +255,8 @@ function FileStructure({ path }: { path: string }) {
           <In n={importedBy.length} />
         </Fact>
       </Facts>
+      <WalkControls walkState={walkState} setWalkState={setWalkState} />
+      {walkState && <WalkResult path={path} walkState={walkState} />}
       {/* Counts above are the lengths of these lists, so they always agree. */}
       <Section title={`Imports, ${imports.length}`}>
         <PathList paths={imports.flatMap((p) => fileInfo.get(p) ?? [])} />
@@ -165,6 +265,79 @@ function FileStructure({ path }: { path: string }) {
         <PathList paths={importedBy.flatMap((p) => fileInfo.get(p) ?? [])} />
       </Section>
     </div>
+  );
+}
+
+function WalkControls({
+  walkState,
+  setWalkState,
+}: {
+  walkState: WalkState;
+  setWalkState: (w: WalkState) => void;
+}) {
+  const depth = walkState?.depth ?? DEFAULT_DEPTH;
+  return (
+    <div className="flex flex-wrap items-center gap-1 px-3 pb-2 text-[11px]">
+      {(["dependents", "dependencies"] as const).map((direction) => {
+        const on = walkState?.direction === direction;
+        return (
+          <button
+            key={direction}
+            type="button"
+            aria-pressed={on}
+            // Clicking the open walk again closes it.
+            onClick={() => setWalkState(on ? null : { direction, depth })}
+            className="h-6 rounded-sm border border-line px-2 hover:border-muted aria-pressed:border-accent aria-pressed:bg-accent/15"
+          >
+            {WALK_LABEL[direction]}
+          </button>
+        );
+      })}
+      {walkState && (
+        <span role="group" aria-label="Depth" className="ml-auto flex items-center gap-0.5 text-muted">
+          depth
+          {DEPTHS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              aria-pressed={d === walkState.depth}
+              onClick={() => setWalkState({ ...walkState, depth: d })}
+              className="h-6 w-5 rounded-sm tabular-nums hover:text-fg aria-pressed:bg-accent/15 aria-pressed:text-fg"
+            >
+              {d}
+            </button>
+          ))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Arithmetic over the edge list already in the browser: no spinner, no request. */
+function WalkResult({ path, walkState }: { path: string; walkState: NonNullable<WalkState> }) {
+  const { neighbours, fileInfo } = useMapState();
+  const reached = walk(neighbours, path, walkState.direction, walkState.depth);
+  const steps = Array.from({ length: walkState.depth }, (_, i) => i + 1);
+
+  return (
+    <Section title={`${WALK_LABEL[walkState.direction]}, ${reached.length}`} note={WALK_NOTE[walkState.direction]}>
+      {reached.length === 0 ? (
+        <p className="px-3 py-0.5 text-muted">None.</p>
+      ) : (
+        steps.map((step) => {
+          const atStep = reached.filter((r) => r.depth === step).flatMap((r) => fileInfo.get(r.path) ?? []);
+          if (atStep.length === 0) return null;
+          return (
+            <div key={step}>
+              <p className="px-3 pt-1 text-[11px] text-muted tabular-nums">
+                {step === 1 ? "1 step" : `${step} steps`}, {atStep.length}
+              </p>
+              <PathList paths={atStep} />
+            </div>
+          );
+        })
+      )}
+    </Section>
   );
 }
 
@@ -252,7 +425,7 @@ function PathList({
 }: {
   paths: ParsedFile[];
   figure?: (f: ParsedFile) => number;
-  direction?: "in" | "out";
+  direction?: "in" | "out" | "none";
 }) {
   if (paths.length === 0) return <p className="px-3 py-0.5 text-muted">None.</p>;
   return (
@@ -278,7 +451,7 @@ function PathButton({
 }: {
   path: string;
   figure?: number;
-  direction?: "in" | "out";
+  direction?: "in" | "out" | "none";
   wrap?: boolean;
 }) {
   const { selectFile, setHover, paneHovered, adapter } = useMapState();
@@ -310,7 +483,16 @@ function PathButton({
         </span>
       )}
       {figure !== undefined && (
-        <span className="shrink-0 font-sans">{direction === "in" ? <In n={figure} /> : <Out n={figure} />}</span>
+        <span className="shrink-0 font-sans">
+          {direction === "in" ? (
+            <In n={figure} />
+          ) : direction === "out" ? (
+            <Out n={figure} />
+          ) : (
+            // Not a direction, so not a direction's colour.
+            <span className="text-muted tabular-nums">{figure}</span>
+          )}
+        </span>
       )}
     </button>
   );

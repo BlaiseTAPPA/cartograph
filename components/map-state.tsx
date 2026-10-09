@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { indexNeighbours, type Neighbours } from "@/lib/map/detail";
 import { fold, type FoldedGroup } from "@/lib/map/fold";
+import { findInsights, type Insights } from "@/lib/map/insights";
 import {
   buildView,
   clampOffset,
@@ -14,7 +15,7 @@ import {
   type Endpoint,
   type MapView,
 } from "@/lib/map/view";
-import { adapterNamed, type FrameworkAdapter } from "@/parser/adapter";
+import { adapterNamed, type FileCategory, type FrameworkAdapter } from "@/parser/adapter";
 import type { Edge, ParsedFile, RepoFile } from "@/parser/types";
 
 /**
@@ -30,6 +31,9 @@ export type Hover = { from: "pane"; path: string } | { from: "map"; endpoint: En
  */
 export type Refit = { id: string; seq: number; mode: "open" | "reveal" };
 
+/** A rail category picked to stand out. null inside is "unclassified". */
+export type CategoryFilter = { category: FileCategory | null } | null;
+
 type MapState = {
   adapter: FrameworkAdapter;
   parsed: ParsedFile[];
@@ -38,6 +42,14 @@ type MapState = {
   fans: ReadonlyMap<string, { fanIn: number; fanOut: number }>;
   neighbours: ReadonlyMap<string, Neighbours>;
   view: MapView;
+  insights: Insights;
+  /** Each file's category, computed once. null is unclassified. */
+  categoryOf: (path: string) => FileCategory | null;
+  filter: CategoryFilter;
+  /** Picks a category, or clears it when it's already the one picked. */
+  toggleFilter: (category: FileCategory | null) => void;
+  /** True for every file when no category is picked. */
+  matches: (path: string) => boolean;
   selected: Endpoint | null;
   hover: Hover;
   refit: Refit | null;
@@ -95,6 +107,19 @@ export function MapStateProvider({
   const [offsets, setOffsets] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [refit, setRefit] = useState<Refit | null>(null);
   const [hover, setHover] = useState<Hover>(null);
+  const [filter, setFilter] = useState<CategoryFilter>(null);
+
+  const categories = useMemo(
+    () => new Map(parsed.map((f) => [f.path, adapter.categorize(f.path)])),
+    [parsed, adapter],
+  );
+  // Facts about the edge list; computed once, nothing fetched. Anything the
+  // adapter recognises is reached by a framework or tool, so it's never
+  // reported as imported by nothing.
+  const insights = useMemo(
+    () => findInsights(parsed, neighbours, (path) => (categories.get(path) ?? null) !== null),
+    [parsed, neighbours, categories],
+  );
 
   const view = useMemo(
     () => buildView(folding.groups, parsed, edges, fans, openSet, offsets),
@@ -113,6 +138,12 @@ export function MapStateProvider({
       fans,
       neighbours,
       view,
+      insights,
+      categoryOf: (path) => categories.get(path) ?? null,
+      filter,
+      toggleFilter: (category) =>
+        setFilter((prev) => (prev !== null && prev.category === category ? null : { category })),
+      matches: (path) => filter === null || (categories.get(path) ?? null) === filter.category,
       selected,
       hover,
       refit,
@@ -180,7 +211,23 @@ export function MapStateProvider({
         return at !== undefined && endpointKey(at) === endpointKey(hover.endpoint);
       },
     };
-  }, [adapter, parsed, fileInfo, folding, fans, neighbours, view, selected, hover, refit, openSet, groupOf]);
+  }, [
+    adapter,
+    parsed,
+    fileInfo,
+    folding,
+    fans,
+    neighbours,
+    view,
+    insights,
+    categories,
+    filter,
+    selected,
+    hover,
+    refit,
+    openSet,
+    groupOf,
+  ]);
 
   return <MapStateContext.Provider value={value}>{children}</MapStateContext.Provider>;
 }

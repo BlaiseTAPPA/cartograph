@@ -140,7 +140,8 @@ export function buildView(
       return {
         ...base,
         kind: "folded",
-        width: 22 + text(label.length + 1 + String(g.files.length).length),
+        // Room for "matched/total" when a rail category is picked.
+        width: 22 + text(label.length + 2 + 2 * String(g.files.length).length),
         height: Math.round(FOLDED_MIN_HEIGHT + FOLDED_EXTRA_HEIGHT * Math.sqrt(fanIn / maxFanIn)),
       };
     }
@@ -167,7 +168,8 @@ export function buildView(
 
     const headerChars = Math.max(
       label.length + 2 + `${g.files.length} files`.length,
-      fanText(fanIn, fanOut).length,
+      // Second line, with room for "N matched" when a rail category is picked.
+      fanText(fanIn, fanOut).length + 2 + `${g.files.length} matched`.length,
     );
     // Width from every row, not just the window, so scrolling never resizes it.
     const rowChars = Math.max(

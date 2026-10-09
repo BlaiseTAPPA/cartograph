@@ -25,7 +25,7 @@ import {
   type PanelNode,
   WINDOW_ROWS,
 } from "@/lib/map/view";
-import { SWATCH } from "./category-rail";
+import { kindColour, SWATCH } from "./category-rail";
 import { useMapState } from "./map-state";
 
 const MIN_ZOOM = 0.1;
@@ -36,7 +36,12 @@ const DIM = 0.2;
 // Hovering a file in the detail pane outlines where it is on the map.
 const HOVER_RING = "outline outline-1 -outline-offset-1 outline-accent";
 
-type Shared = { focus: Focus | null };
+/**
+ * With a rail category picked, how many of a node's files are in it. null when
+ * nothing is picked. `hidden` counts the matches behind a panel's window.
+ */
+type Matched = { files: number; hidden: number } | null;
+type Shared = { focus: Focus | null; matched: Matched };
 type FoldedFlowNode = FlowNode<{ view: FoldedNode } & Shared, "folded">;
 type PanelFlowNode = FlowNode<{ view: PanelNode } & Shared, "panel">;
 
@@ -48,11 +53,11 @@ const rowHandle = (side: "in" | "out" | "inr", index: number | "more") => `${sid
 const HANDLE = "!size-px !min-h-0 !min-w-0 !border-0 !bg-transparent";
 
 function FoldedNodeView({ data }: NodeProps<FoldedFlowNode>) {
-  const { open, setHover, mapHovered } = useMapState();
-  const { view, focus } = data;
+  const { open, setHover, mapHovered, filter } = useMapState();
+  const { view, focus, matched } = data;
   const endpoint: Endpoint = { node: view.id, slot: null };
   const hovered = mapHovered(endpoint);
-  const lit = !focus || hovered || focus.nodes.has(view.id);
+  const lit = hovered || ((!focus || focus.nodes.has(view.id)) && (matched === null || matched.files > 0));
   return (
     // A div acting as a button: a real <button> can't hold the handles' divs.
     <div
@@ -70,7 +75,14 @@ function FoldedNodeView({ data }: NodeProps<FoldedFlowNode>) {
     >
       <Handle type="target" position={Position.Left} id="in" isConnectable={false} className={HANDLE} />
       <span className="font-mono">{view.label}</span>
-      <span className="text-muted tabular-nums">{view.files}</span>
+      {matched === null || filter === null ? (
+        <span className="text-muted tabular-nums">{view.files}</span>
+      ) : (
+        <span className="tabular-nums" title={`${matched.files} of ${view.files} files match`}>
+          <span style={{ color: kindColour(filter.category) }}>{matched.files}</span>
+          <span className="text-muted">/{view.files}</span>
+        </span>
+      )}
       <Handle type="source" position={Position.Right} id="out" isConnectable={false} className={HANDLE} />
     </div>
   );
@@ -100,16 +112,17 @@ function RowHandles({ index }: { index: number | "more" }) {
 }
 
 function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
-  const { close, select, scroll, adapter, selected, setHover, mapHovered } = useMapState();
+  const { close, select, scroll, adapter, selected, setHover, mapHovered, filter, matches } = useMapState();
   // Wheel deltas arrive in pixels, often a few at a time from a trackpad.
   // They add up here and the window moves a row per row-height scrolled.
   const wheel = useRef(0);
-  const { view, focus } = data;
+  const { view, focus, matched } = data;
   const panelSelected = selected?.node === view.id && selected.slot === null;
   const rowLit = (slot: string) =>
     !focus || panelSelected || focus.rows.has(rowKey(view.id, slot)) || mapHovered({ node: view.id, slot });
   const anyLit =
-    !focus || panelSelected || view.rows.some((r) => rowLit(r.path)) || rowLit(MORE_SLOT);
+    (!focus || panelSelected || view.rows.some((r) => rowLit(r.path)) || rowLit(MORE_SLOT)) &&
+    (matched === null || matched.files > 0);
 
   return (
     // Nothing inside lit: the whole box dims, border included. Otherwise the
@@ -129,7 +142,14 @@ function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
           <span className="truncate font-mono font-medium">{view.label}</span>
           <span className="shrink-0 text-muted tabular-nums">{view.files} files</span>
         </span>
-        <Fans fanIn={view.fanIn} fanOut={view.fanOut} />
+        <span className="flex items-baseline justify-between gap-2">
+          <Fans fanIn={view.fanIn} fanOut={view.fanOut} />
+          {matched !== null && filter !== null && (
+            <span className="tabular-nums" style={{ color: kindColour(filter.category) }}>
+              {matched.files} matched
+            </span>
+          )}
+        </span>
       </button>
       {/* nowheel: the wheel scrolls the rows here instead of zooming the map. */}
       <ul
@@ -158,7 +178,7 @@ function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
           return (
             <li
               key={row.path}
-              style={{ height: ROW_HEIGHT, opacity: !anyLit || rowLit(row.path) ? 1 : DIM }}
+              style={{ height: ROW_HEIGHT, opacity: !anyLit || (rowLit(row.path) && matches(row.path)) ? 1 : DIM }}
               className={`relative flex cursor-default items-center gap-1.5 px-2.5 ${isSelected ? "bg-accent/15" : "hover:bg-surface"} ${mapHovered(endpoint) ? HOVER_RING : ""}`}
               role="button"
               tabIndex={0}
@@ -184,7 +204,10 @@ function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
         })}
         {view.hidden > 0 && (
           <li
-            style={{ height: ROW_HEIGHT, opacity: !anyLit || rowLit(MORE_SLOT) ? 1 : DIM }}
+            style={{
+              height: ROW_HEIGHT,
+              opacity: !anyLit || (rowLit(MORE_SLOT) && (matched === null || matched.hidden > 0)) ? 1 : DIM,
+            }}
             className={`relative flex items-center justify-end px-2.5 text-muted tabular-nums ${mapHovered({ node: view.id, slot: MORE_SLOT }) ? HOVER_RING : ""}`}
             onMouseEnter={() => setHover({ from: "map", endpoint: { node: view.id, slot: MORE_SLOT } })}
             onMouseLeave={() => setHover(null)}
@@ -206,8 +229,22 @@ const nodeTypes = { folded: FoldedNodeView, panel: PanelNodeView };
 const EDGE_COLOUR = { in: "var(--edge-in)", out: "var(--edge-out)", within: "var(--fg)" } as const;
 
 function MapInner() {
-  const { view, selected, select, refit } = useMapState();
+  const { view, selected, select, refit, filter, matches, groups } = useMapState();
   const placed = useMemo(() => layoutView(view), [view]);
+
+  // Per node, how many files the picked category matches, and how many of
+  // those sit behind a panel's window.
+  const matchedBy = useMemo(() => {
+    const m = new Map<string, NonNullable<Matched>>();
+    if (filter === null) return m;
+    for (const g of groups) {
+      const node = view.nodes.find((n) => n.id === g.dir);
+      const shown = new Set(node?.kind === "panel" ? node.rows.map((r) => r.path) : []);
+      const hits = g.files.filter(matches);
+      m.set(g.dir, { files: hits.length, hidden: node?.kind === "panel" ? hits.filter((p) => !shown.has(p)).length : 0 });
+    }
+    return m;
+  }, [filter, groups, view, matches]);
   const focus = useMemo(() => (selected ? focusOn(selected, view.edges) : null), [selected, view]);
 
   const { getViewport, setViewport } = useReactFlow();
@@ -277,11 +314,12 @@ function MapInner() {
           // across its text.
           zIndex: 2,
         };
+        const matched = filter === null ? null : (matchedBy.get(n.id) ?? { files: 0, hidden: 0 });
         return n.kind === "folded"
-          ? { ...common, type: "folded", data: { view: n, focus } }
-          : { ...common, type: "panel", data: { view: n, focus } };
+          ? { ...common, type: "folded", data: { view: n, focus, matched } }
+          : { ...common, type: "panel", data: { view: n, focus, matched } };
       }),
-    [view, placed, focus],
+    [view, placed, focus, filter, matchedBy],
   );
 
   const flowEdges = useMemo(() => {
@@ -292,11 +330,20 @@ function MapInner() {
     const slotIndex = (e: Endpoint): number | "more" =>
       e.slot === MORE_SLOT ? "more" : (rowIndex.get(rowKey(e.node, e.slot ?? "")) ?? "more");
 
+    // An edge stays with a picked category when either end holds a match.
+    const endMatches = (e: Endpoint) => {
+      if (filter === null) return true;
+      if (e.slot === null) return (matchedBy.get(e.node)?.files ?? 0) > 0;
+      if (e.slot === MORE_SLOT) return (matchedBy.get(e.node)?.hidden ?? 0) > 0;
+      return matches(e.slot);
+    };
+
     return view.edges.map((e, i): FlowEdge => {
       const within = e.source.node === e.target.node;
       const relation = focus?.edges.get(e.id);
+      const kept = endMatches(e.source) || endMatches(e.target);
       const stroke = relation ? EDGE_COLOUR[relation] : "var(--fg-muted)";
-      const opacity = relation ? 0.9 : focus ? 0.06 : 0.35;
+      const opacity = !kept ? 0.06 : relation ? 0.9 : focus ? 0.06 : 0.35;
       return {
         id: `e${i}`,
         source: e.source.node,
@@ -307,11 +354,11 @@ function MapInner() {
         selectable: false,
         focusable: false,
         // Lit edges draw over dimmed ones, still under the nodes (zIndex 2).
-        zIndex: relation ? 1 : 0,
+        zIndex: relation && kept ? 1 : 0,
         style: { stroke, strokeOpacity: opacity, strokeWidth: 1 + Math.min(3, Math.log2(e.count)) },
       };
     });
-  }, [view, focus]);
+  }, [view, focus, filter, matchedBy, matches]);
 
   const clear = useCallback(() => select(null), [select]);
 

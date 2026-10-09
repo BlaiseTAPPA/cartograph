@@ -1,11 +1,11 @@
 import { countByCategory } from "@/lib/categories";
 import { loadPreview, PREVIEW_SOURCE } from "@/lib/preview";
 import { adapterNamed } from "@/parser/adapter";
-import { CategoryRail } from "../category-rail";
-import { DetailPane } from "../detail-pane";
-import { MapCanvas } from "../map-canvas";
-import { MapShell } from "../map-shell";
-import { MapStateProvider } from "../map-state";
+import { CategoryRail } from "../../../components/category-rail";
+import { DetailPane } from "../../../components/detail-pane";
+import { MapCanvas } from "../../../components/map-canvas";
+import { MapShell } from "../../../components/map-shell";
+import { MapStateProvider } from "../../../components/map-state";
 
 // The checked-in parser run, drawn through the real interface.
 export default function PreviewPage() {

@@ -16,6 +16,7 @@
   --edge-out: #d97706;
   /* File kinds. Kept clear of the accent blue and of the green and amber
      reserved for edge direction. Unclassified has no hue at all. */
+  --kind-entry: #4f46e5;
   --kind-test: #7c3aed;
   --kind-story: #c026d3;
   --kind-config: #0891b2;
@@ -33,6 +34,7 @@
     --accent: #4b8bf5;
     --edge-in: #4ade80;
     --edge-out: #fbbf24;
+    --kind-entry: #818cf8;
     --kind-test: #a78bfa;
     --kind-story: #e879f9;
     --kind-config: #22d3ee;
@@ -50,6 +52,7 @@
   --accent: #4b8bf5;
   --edge-in: #4ade80;
   --edge-out: #fbbf24;
+  --kind-entry: #818cf8;
   --kind-test: #a78bfa;
   --kind-story: #e879f9;
   --kind-config: #22d3ee;
@@ -63,6 +66,7 @@
   --color-fg: var(--fg);
   --color-muted: var(--fg-muted);
   --color-accent: var(--accent);
+  --color-kind-entry: var(--kind-entry);
   --color-kind-test: var(--kind-test);
   --color-kind-story: var(--kind-story);
   --color-kind-config: var(--kind-config);
