@@ -11,6 +11,15 @@
   --fg: #18181b;
   --fg-muted: #71717a;
   --accent: #2563eb;
+  /* Edge direction, relative to whatever is selected. */
+  --edge-in: #16a34a;
+  --edge-out: #d97706;
+  /* File kinds. Kept clear of the accent blue and of the green and amber
+     reserved for edge direction. Unclassified has no hue at all. */
+  --kind-test: #7c3aed;
+  --kind-story: #c026d3;
+  --kind-config: #0891b2;
+  --kind-script: #e11d48;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,6 +31,12 @@
     --fg: #e4e4e7;
     --fg-muted: #8a8a93;
     --accent: #4b8bf5;
+    --edge-in: #4ade80;
+    --edge-out: #fbbf24;
+    --kind-test: #a78bfa;
+    --kind-story: #e879f9;
+    --kind-config: #22d3ee;
+    --kind-script: #fb7185;
   }
 }
 
@@ -33,6 +48,12 @@
   --fg: #e4e4e7;
   --fg-muted: #8a8a93;
   --accent: #4b8bf5;
+  --edge-in: #4ade80;
+  --edge-out: #fbbf24;
+  --kind-test: #a78bfa;
+  --kind-story: #e879f9;
+  --kind-config: #22d3ee;
+  --kind-script: #fb7185;
 }
 
 @theme inline {
@@ -42,6 +63,10 @@
   --color-fg: var(--fg);
   --color-muted: var(--fg-muted);
   --color-accent: var(--accent);
+  --color-kind-test: var(--kind-test);
+  --color-kind-story: var(--kind-story);
+  --color-kind-config: var(--kind-config);
+  --color-kind-script: var(--kind-script);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
