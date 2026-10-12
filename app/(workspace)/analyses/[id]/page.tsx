@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getAnalysis, type AnalysisSummary } from "@/lib/analyses";
-import { countByRole } from "@/lib/categories";
 import { splitRepo } from "@/lib/repo";
 import { countStoredRoutes, getStoredGraph, getStoredRoutes } from "@/lib/stored-graph";
 import { RESULT_VERSION } from "@/parser/types";
@@ -104,15 +103,27 @@ async function Analysis({
 
 async function StoredMap({ analysis, repo }: { analysis: AnalysisSummary; repo: string }) {
   const [graph, routes] = await Promise.all([getStoredGraph(analysis.id), countStoredRoutes(analysis.id)]);
-  const counts = countByRole(graph.files, graph.framework);
   const gitRef = analysis.commitSha?.slice(0, 7) ?? "";
 
   return (
     // Map and pane share one selection, so both sit inside the same state.
-    <MapStateProvider files={graph.files} edges={graph.edges} framework={graph.framework}>
+    <MapStateProvider
+      files={graph.files}
+      edges={graph.edges}
+      framework={graph.framework}
+      labelledByModel={graph.labelledByModel}
+    >
       <MapShell
-        rail={<CategoryRail title={repo} subtitle={gitRef} counts={counts} skipped={graph.coverage.files.skipped} />}
-        detail={<DetailPane repo={repo} gitRef={gitRef} coverage={graph.coverage} routes={routes} />}
+        rail={<CategoryRail title={repo} subtitle={gitRef} skipped={graph.coverage.files.skipped} />}
+        detail={
+          <DetailPane
+            analysisId={analysis.id}
+            repo={repo}
+            gitRef={gitRef}
+            coverage={graph.coverage}
+            routes={routes}
+          />
+        }
         banner={<CoverageBanner coverage={graph.coverage} />}
       >
         <MapCanvas />

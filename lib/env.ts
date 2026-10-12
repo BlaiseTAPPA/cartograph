@@ -26,6 +26,9 @@ export const env = {
   supabasePublishableKey: need("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
   // Bypasses row-level security. Only the analysis run reads it.
   supabaseSecretKey: need("SUPABASE_SECRET_KEY"),
+  // Tracing is read by LangSmith from its own variables and is optional;
+  // whether it is on is shown beside every answer instead.
+  openaiApiKey: need("OPENAI_API_KEY"),
 };
 
 if (missing.length > 0) {

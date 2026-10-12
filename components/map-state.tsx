@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { countByRole, type RoleCount } from "@/lib/categories";
 import { edgeKey, indexEdgeKinds, indexNeighbours, type Neighbours } from "@/lib/map/detail";
 import { fold, type FoldedGroup } from "@/lib/map/fold";
 import { findInsights, type Insights } from "@/lib/map/insights";
@@ -45,8 +46,14 @@ type MapState = {
   kindsOf: (from: string, to: string) => readonly EdgeKind[];
   view: MapView;
   insights: Insights;
-  /** Each file's stored role. null is unclassified. */
+  /** Each file's role, a convention's or a model's. null is unclassified. */
   roleOf: (path: string) => Role | null;
+  /** Whether a file's role was given by a model rather than a convention. */
+  labelledByModel: (path: string) => boolean;
+  /** Records a label a model gave just now, so the map, rail and pane show it without a reload. */
+  label: (path: string, role: Role) => void;
+  /** Files per role, in the rail's order. */
+  counts: RoleCount[];
   filter: RoleFilter;
   /** Picks a role, or clears it when it's already the one picked. */
   toggleFilter: (role: Role | null) => void;
@@ -85,16 +92,27 @@ export function MapStateProvider({
   files,
   edges,
   framework,
+  labelledByModel,
   children,
 }: {
   files: RepoFile[];
   edges: Edge[];
   framework: Framework;
+  labelledByModel: string[];
   children: ReactNode;
 }) {
-  const parsed = useMemo(() => files.flatMap((f) => (f.status === "parsed" ? [f] : [])), [files]);
+  // As stored. The fold and the layout read this, never the labels, so a new
+  // label recolours a row and moves nothing.
+  const stored = useMemo(() => files.flatMap((f) => (f.status === "parsed" ? [f] : [])), [files]);
+  const [labels, setLabels] = useState<ReadonlyMap<string, Role>>(() => new Map());
+  const parsed = useMemo(
+    () => (labels.size === 0 ? stored : stored.map((f) => (labels.has(f.path) ? { ...f, role: labels.get(f.path) ?? null } : f))),
+    [stored, labels],
+  );
+  const byModel = useMemo(() => new Set([...labelledByModel, ...labels.keys()]), [labelledByModel, labels]);
+  const counts = useMemo(() => countByRole(parsed, framework), [parsed, framework]);
   const fileInfo = useMemo(() => new Map(parsed.map((f) => [f.path, f])), [parsed]);
-  const folding = useMemo(() => fold(parsed), [parsed]);
+  const folding = useMemo(() => fold(stored), [stored]);
   const fans = useMemo(() => folderFans(folding.groups, edges), [folding, edges]);
   const neighbours = useMemo(() => indexNeighbours(edges), [edges]);
   const edgeKinds = useMemo(() => indexEdgeKinds(edges, EDGE_KINDS), [edges]);
@@ -118,18 +136,19 @@ export function MapStateProvider({
   );
   // Facts about the edge list; computed once, nothing fetched. A file a
   // framework or tool reaches by name is never reported as imported by nothing.
+  // Only a convention says that: a model's label decides nothing structural.
   const insights = useMemo(
     () =>
-      findInsights(parsed, neighbours, (path) => {
+      findInsights(stored, neighbours, (path) => {
         const role = roles.get(path) ?? null;
-        return role !== null && ROLES[role].reachedByName;
+        return role !== null && !byModel.has(path) && ROLES[role].reachedByName;
       }),
-    [parsed, neighbours, roles],
+    [stored, neighbours, roles, byModel],
   );
 
   const view = useMemo(
-    () => buildView(folding.groups, parsed, edges, fans, openSet, offsets),
-    [folding, parsed, edges, fans, openSet, offsets],
+    () => buildView(folding.groups, stored, edges, fans, openSet, offsets),
+    [folding, stored, edges, fans, openSet, offsets],
   );
 
   const value = useMemo<MapState>(() => {
@@ -147,6 +166,9 @@ export function MapStateProvider({
       view,
       insights,
       roleOf: (path) => roles.get(path) ?? null,
+      labelledByModel: (path) => byModel.has(path),
+      label: (path, role) => setLabels((prev) => new Map(prev).set(path, role)),
+      counts,
       filter,
       toggleFilter: (role) => setFilter((prev) => (prev !== null && prev.role === role ? null : { role })),
       matches: (path) => filter === null || (roles.get(path) ?? null) === filter.role,
@@ -228,6 +250,8 @@ export function MapStateProvider({
     view,
     insights,
     roles,
+    byModel,
+    counts,
     filter,
     selected,
     hover,

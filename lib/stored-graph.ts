@@ -9,6 +9,8 @@ export type StoredGraph = {
   edges: Edge[];
   coverage: Coverage;
   framework: Framework;
+  /** Files whose role a model gave, not a convention. */
+  labelledByModel: string[];
 };
 
 export type StoredRoutes = {
@@ -50,12 +52,13 @@ export async function getStoredGraph(analysisId: string): Promise<StoredGraph> {
     lines: number | null;
     hash: string | null;
     role: string | null;
+    role_from_model: boolean;
   };
   const fileRows: FileRow[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("files")
-      .select("id, path, module, skip_reason, lines, hash, role")
+      .select("id, path, module, skip_reason, lines, hash, role, role_from_model")
       .eq("analysis_id", analysisId)
       .order("id")
       .range(from, from + PAGE - 1);
@@ -112,7 +115,8 @@ export async function getStoredGraph(analysisId: string): Promise<StoredGraph> {
   if (coverage.files.found !== files.length) {
     throw new Error(`Coverage counts ${coverage.files.found} files but ${files.length} are stored.`);
   }
-  return { files, edges, coverage, framework };
+  const labelledByModel = fileRows.filter((f) => f.role_from_model).map((f) => f.path);
+  return { files, edges, coverage, framework, labelledByModel };
 }
 
 /**

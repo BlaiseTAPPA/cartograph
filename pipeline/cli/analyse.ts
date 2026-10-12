@@ -1,6 +1,7 @@
-// Usage: node --env-file=.env.local pipeline/cli/analyse.ts <github-url> --org <org_id> [--rerun]
+// Usage: pnpm analyse <github-url> --org <org_id> [--rerun]
 // Runs the whole pipeline from a terminal, writing to the database exactly as
 // the app will. --rerun re-queues an existing analysis instead of stopping.
+import "../../lib/script-env.ts";
 import { requeueAnalysis, runAnalysis, startAnalysis } from "../run.ts";
 
 const args = process.argv.slice(2);
@@ -11,7 +12,7 @@ const positional = args.filter((a, i) => !a.startsWith("--") && i !== orgIndex +
 const url = positional.length === 1 ? positional[0] : null;
 
 if (!url || !orgId) {
-  console.error("Usage: node --env-file=.env.local pipeline/cli/analyse.ts <github-url> --org <org_id> [--rerun]");
+  console.error("Usage: pnpm analyse <github-url> --org <org_id> [--rerun]");
   process.exit(1);
 }
 
