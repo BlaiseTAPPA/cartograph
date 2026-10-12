@@ -15,7 +15,7 @@ import {
   type Endpoint,
   type MapView,
 } from "@/lib/map/view";
-import { adapterNamed, type FileCategory, type FrameworkAdapter } from "@/parser/adapter";
+import { ROLES, roleIn, type Framework, type Role } from "@/frameworks/taxonomy";
 import type { Edge, ParsedFile, RepoFile } from "@/parser/types";
 
 /**
@@ -31,11 +31,11 @@ export type Hover = { from: "pane"; path: string } | { from: "map"; endpoint: En
  */
 export type Refit = { id: string; seq: number; mode: "open" | "reveal" };
 
-/** A rail category picked to stand out. null inside is "unclassified". */
-export type CategoryFilter = { category: FileCategory | null } | null;
+/** A rail role picked to stand out. null inside is "unclassified". */
+export type RoleFilter = { role: Role | null } | null;
 
 type MapState = {
-  adapter: FrameworkAdapter;
+  framework: Framework;
   parsed: ParsedFile[];
   fileInfo: ReadonlyMap<string, ParsedFile>;
   groups: FoldedGroup[];
@@ -43,11 +43,11 @@ type MapState = {
   neighbours: ReadonlyMap<string, Neighbours>;
   view: MapView;
   insights: Insights;
-  /** Each file's category, computed once. null is unclassified. */
-  categoryOf: (path: string) => FileCategory | null;
-  filter: CategoryFilter;
-  /** Picks a category, or clears it when it's already the one picked. */
-  toggleFilter: (category: FileCategory | null) => void;
+  /** Each file's stored role. null is unclassified. */
+  roleOf: (path: string) => Role | null;
+  filter: RoleFilter;
+  /** Picks a role, or clears it when it's already the one picked. */
+  toggleFilter: (role: Role | null) => void;
   /** True for every file when no category is picked. */
   matches: (path: string) => boolean;
   selected: Endpoint | null;
@@ -82,15 +82,14 @@ export const neighboursOf = (index: ReadonlyMap<string, Neighbours>, path: strin
 export function MapStateProvider({
   files,
   edges,
-  adapterName,
+  framework,
   children,
 }: {
   files: RepoFile[];
   edges: Edge[];
-  adapterName: string;
+  framework: Framework;
   children: ReactNode;
 }) {
-  const adapter = useMemo(() => adapterNamed(adapterName), [adapterName]);
   const parsed = useMemo(() => files.flatMap((f) => (f.status === "parsed" ? [f] : [])), [files]);
   const fileInfo = useMemo(() => new Map(parsed.map((f) => [f.path, f])), [parsed]);
   const folding = useMemo(() => fold(parsed), [parsed]);
@@ -107,18 +106,22 @@ export function MapStateProvider({
   const [offsets, setOffsets] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [refit, setRefit] = useState<Refit | null>(null);
   const [hover, setHover] = useState<Hover>(null);
-  const [filter, setFilter] = useState<CategoryFilter>(null);
+  const [filter, setFilter] = useState<RoleFilter>(null);
 
-  const categories = useMemo(
-    () => new Map(parsed.map((f) => [f.path, adapter.categorize(f.path)])),
-    [parsed, adapter],
+  // The stored role was checked against this framework's rail when read.
+  const roles = useMemo(
+    () => new Map(parsed.map((f) => [f.path, f.role === null ? null : roleIn(framework, f.role)])),
+    [parsed, framework],
   );
-  // Facts about the edge list; computed once, nothing fetched. Anything the
-  // adapter recognises is reached by a framework or tool, so it's never
-  // reported as imported by nothing.
+  // Facts about the edge list; computed once, nothing fetched. A file a
+  // framework or tool reaches by name is never reported as imported by nothing.
   const insights = useMemo(
-    () => findInsights(parsed, neighbours, (path) => (categories.get(path) ?? null) !== null),
-    [parsed, neighbours, categories],
+    () =>
+      findInsights(parsed, neighbours, (path) => {
+        const role = roles.get(path) ?? null;
+        return role !== null && ROLES[role].reachedByName;
+      }),
+    [parsed, neighbours, roles],
   );
 
   const view = useMemo(
@@ -131,7 +134,7 @@ export function MapStateProvider({
       setRefit((prev) => ({ id, mode, seq: (prev?.seq ?? 0) + 1 }));
 
     return {
-      adapter,
+      framework,
       parsed,
       fileInfo,
       groups: folding.groups,
@@ -139,11 +142,10 @@ export function MapStateProvider({
       neighbours,
       view,
       insights,
-      categoryOf: (path) => categories.get(path) ?? null,
+      roleOf: (path) => roles.get(path) ?? null,
       filter,
-      toggleFilter: (category) =>
-        setFilter((prev) => (prev !== null && prev.category === category ? null : { category })),
-      matches: (path) => filter === null || (categories.get(path) ?? null) === filter.category,
+      toggleFilter: (role) => setFilter((prev) => (prev !== null && prev.role === role ? null : { role })),
+      matches: (path) => filter === null || (roles.get(path) ?? null) === filter.role,
       selected,
       hover,
       refit,
@@ -212,7 +214,7 @@ export function MapStateProvider({
       },
     };
   }, [
-    adapter,
+    framework,
     parsed,
     fileInfo,
     folding,
@@ -220,7 +222,7 @@ export function MapStateProvider({
     neighbours,
     view,
     insights,
-    categories,
+    roles,
     filter,
     selected,
     hover,

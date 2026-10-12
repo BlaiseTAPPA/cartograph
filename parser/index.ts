@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { fallbackAdapter, type FrameworkAdapter } from "./adapter.ts";
+import type { FrameworkAdapter } from "./adapter.ts";
 import { dedupeEdges, fanCounts } from "./graph.ts";
-import { findImports, type FoundImport } from "./imports.ts";
+import { findImports } from "./imports.ts";
 import { Resolver, type KnownFile } from "./resolve.ts";
+import { withSyntax } from "./syntax.ts";
 import {
   RESULT_VERSION,
   type Coverage,
@@ -12,18 +13,20 @@ import {
   type ImportRecord,
   type ParseResult,
   type RepoFile,
+  type Route,
+  type RouteGap,
   type SkipReason,
 } from "./types.ts";
 import { isDeclarationPath, MAX_FILE_BYTES, moduleOf, walkRepository } from "./walk.ts";
 
 export type * from "./types.ts";
-export { fallbackAdapter, type FrameworkAdapter } from "./adapter.ts";
+export type * from "./adapter.ts";
 
-/** Path in, data out. Reads the directory and nothing else. */
-export function parseRepository(
-  directory: string,
-  adapter: FrameworkAdapter = fallbackAdapter,
-): ParseResult {
+/**
+ * Path in, data out. Reads the directory and nothing else. The adapter says
+ * what the files are; the parser only reads them.
+ */
+export function parseRepository(directory: string, adapter: FrameworkAdapter): ParseResult {
   // The real path, so a resolved file can be compared against the root
   // whatever symlinks or casing the caller used.
   const root = realpathSync.native(path.resolve(directory));
@@ -59,9 +62,19 @@ export function parseRepository(
 
   const imports: ImportRecord[] = [];
   const rawEdges: Edge[] = [];
+  const roles = new Map<string, string | null>();
+  const routes: Route[] = [];
+  const routeGaps: RouteGap[] = [...adapter.repositoryGaps];
   for (const file of pending) {
     if (file.status !== "parsed") continue;
-    const found: FoundImport[] = findImports(path.join(root, file.path), file.text);
+    // One tree per file, read by both the import finder and the adapter.
+    const { found, reading } = withSyntax(path.join(root, file.path), file.text, (syntax) => ({
+      found: findImports(syntax),
+      reading: adapter.read({ path: file.path, syntax }),
+    }));
+    roles.set(file.path, reading.role);
+    routes.push(...reading.routes);
+    routeGaps.push(...reading.gaps);
     for (const imp of found) {
       const outcome = resolver.resolve(imp, file.path);
       imports.push({
@@ -97,6 +110,7 @@ export function parseRepository(
       hash: createHash("sha256").update(f.bytes).digest("hex"),
       fanIn: counts.fanIn,
       fanOut: counts.fanOut,
+      role: roles.get(f.path) ?? null,
     };
   });
 
@@ -107,6 +121,8 @@ export function parseRepository(
     files,
     edges,
     imports,
+    routes,
+    routeGaps,
     coverage: buildCoverage(files, imports, walk.ignoredDirectories, resolver.configErrors),
   };
 }

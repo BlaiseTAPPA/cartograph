@@ -1,13 +1,20 @@
+import { frameworkNamed, roleIn, type Framework } from "@/frameworks/taxonomy";
 import { fanCounts } from "@/parser/graph";
-import { readCoverage } from "@/parser/output";
-import { EDGE_KINDS, SKIP_REASONS, type Coverage, type Edge, type RepoFile } from "@/parser/types";
+import { readCoverage, readRouteGaps } from "@/parser/output";
+import { EDGE_KINDS, SKIP_REASONS, type Coverage, type Edge, type RepoFile, type Route, type RouteGap } from "@/parser/types";
 import { createServerSupabase } from "./supabase";
 
 export type StoredGraph = {
   files: RepoFile[];
   edges: Edge[];
   coverage: Coverage;
-  adapter: string;
+  framework: Framework;
+};
+
+export type StoredRoutes = {
+  framework: Framework;
+  routes: Route[];
+  gaps: RouteGap[];
 };
 
 // PostgREST caps a response at 1000 rows. Pages are read until one comes back
@@ -33,13 +40,22 @@ export async function getStoredGraph(analysisId: string): Promise<StoredGraph> {
   if (analysis.status !== "complete" || analysis.coverage === null || analysis.adapter === null) {
     throw new Error(`Analysis ${analysisId} has no stored graph: it is ${analysis.status}.`);
   }
+  const framework = storedFramework(analysis.adapter);
 
-  type FileRow = { id: string; path: string; module: string; skip_reason: string | null; lines: number | null; hash: string | null };
+  type FileRow = {
+    id: string;
+    path: string;
+    module: string;
+    skip_reason: string | null;
+    lines: number | null;
+    hash: string | null;
+    role: string | null;
+  };
   const fileRows: FileRow[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("files")
-      .select("id, path, module, skip_reason, lines, hash")
+      .select("id, path, module, skip_reason, lines, hash, role")
       .eq("analysis_id", analysisId)
       .order("id")
       .range(from, from + PAGE - 1);
@@ -83,8 +99,11 @@ export async function getStoredGraph(analysisId: string): Promise<StoredGraph> {
         return { status: "skipped", path: f.path, module: f.module, reason };
       }
       if (f.lines === null || f.hash === null) throw new Error(`${f.path} is stored as parsed without its line count or hash.`);
+      if (f.role !== null && roleIn(framework, f.role) === null) {
+        throw new Error(`${f.path} is stored with role "${f.role}", which ${framework} doesn't name.`);
+      }
       const counts = fan.get(f.path) ?? { fanIn: 0, fanOut: 0 };
-      return { status: "parsed", path: f.path, module: f.module, lines: f.lines, hash: f.hash, ...counts };
+      return { status: "parsed", path: f.path, module: f.module, lines: f.lines, hash: f.hash, role: f.role, ...counts };
     })
     // A stable order, so the map lays out the same on every load.
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -93,5 +112,62 @@ export async function getStoredGraph(analysisId: string): Promise<StoredGraph> {
   if (coverage.files.found !== files.length) {
     throw new Error(`Coverage counts ${coverage.files.found} files but ${files.length} are stored.`);
   }
-  return { files, edges, coverage, adapter: analysis.adapter };
+  return { files, edges, coverage, framework };
+}
+
+/**
+ * The route table of a completed analysis, and what the code declares that
+ * couldn't be read exactly. Ordered by path then method, so routes under one
+ * prefix read together.
+ */
+export async function getStoredRoutes(analysisId: string): Promise<StoredRoutes> {
+  const supabase = createServerSupabase();
+
+  const { data: analysis, error } = await supabase
+    .from("analyses")
+    .select("status, adapter, route_gaps")
+    .eq("id", analysisId)
+    .single();
+  if (error) throw new Error(`Reading the analysis failed: ${error.message}`);
+  if (analysis.status !== "complete" || analysis.adapter === null || analysis.route_gaps === null) {
+    throw new Error(`Analysis ${analysisId} has no stored routes: it is ${analysis.status}.`);
+  }
+  const framework = storedFramework(analysis.adapter);
+  const gaps = readRouteGaps(analysis.route_gaps);
+
+  const routes: Route[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("routes")
+      // Two keys lead from routes to files; this one also ties the file to
+      // the same analysis.
+      .select("method, path, line, file:files!routes_file_in_analysis(path)")
+      .eq("analysis_id", analysisId)
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`Reading routes failed: ${error.message}`);
+    for (const row of data) routes.push({ method: row.method, path: row.path, file: row.file.path, line: row.line });
+    if (data.length < PAGE) break;
+  }
+
+  routes.sort((a, b) =>
+    a.path !== b.path ? (a.path < b.path ? -1 : 1) : a.method !== b.method ? (a.method < b.method ? -1 : 1) : 0,
+  );
+  return { framework, routes, gaps };
+}
+
+/** How many routes an analysis stored, counted in the database. */
+export async function countStoredRoutes(analysisId: string): Promise<number> {
+  const { count, error } = await createServerSupabase()
+    .from("routes")
+    .select("id", { count: "exact", head: true })
+    .eq("analysis_id", analysisId);
+  if (error || count === null) throw new Error(`Counting routes failed: ${error?.message ?? "no count returned"}`);
+  return count;
+}
+
+function storedFramework(adapter: string): Framework {
+  const framework = frameworkNamed(adapter);
+  if (framework === null) throw new Error(`Analysis is stored with adapter "${adapter}", which no rail describes.`);
+  return framework;
 }

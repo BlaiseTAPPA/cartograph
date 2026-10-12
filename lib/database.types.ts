@@ -28,6 +28,8 @@ export type Database = {
           id: string
           org_id: string
           project_id: string
+          result_version: number | null
+          route_gaps: Json | null
           stage: Database["public"]["Enums"]["analysis_stage"] | null
           stage_changed_at: string | null
           stage_message: string | null
@@ -43,6 +45,8 @@ export type Database = {
           id?: string
           org_id: string
           project_id: string
+          result_version?: number | null
+          route_gaps?: Json | null
           stage?: Database["public"]["Enums"]["analysis_stage"] | null
           stage_changed_at?: string | null
           stage_message?: string | null
@@ -58,6 +62,8 @@ export type Database = {
           id?: string
           org_id?: string
           project_id?: string
+          result_version?: number | null
+          route_gaps?: Json | null
           stage?: Database["public"]["Enums"]["analysis_stage"] | null
           stage_changed_at?: string | null
           stage_message?: string | null
@@ -220,6 +226,7 @@ export type Database = {
           module: string
           org_id: string
           path: string
+          role: string | null
           skip_reason: string | null
         }
         Insert: {
@@ -230,6 +237,7 @@ export type Database = {
           module: string
           org_id: string
           path: string
+          role?: string | null
           skip_reason?: string | null
         }
         Update: {
@@ -240,6 +248,7 @@ export type Database = {
           module?: string
           org_id?: string
           path?: string
+          role?: string | null
           skip_reason?: string | null
         }
         Relationships: [
@@ -344,33 +353,53 @@ export type Database = {
       }
       routes: {
         Row: {
+          analysis_id: string
           file_id: string
           id: string
+          line: number
           method: string
           org_id: string
           path: string
         }
         Insert: {
+          analysis_id: string
           file_id: string
           id?: string
+          line: number
           method: string
           org_id: string
           path: string
         }
         Update: {
+          analysis_id?: string
           file_id?: string
           id?: string
+          line?: number
           method?: string
           org_id?: string
           path?: string
         }
         Relationships: [
           {
+            foreignKeyName: "routes_analysis_fkey"
+            columns: ["analysis_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
             foreignKeyName: "routes_file_id_org_id_fkey"
             columns: ["file_id", "org_id"]
             isOneToOne: false
             referencedRelation: "files"
             referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "routes_file_in_analysis"
+            columns: ["file_id", "analysis_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id", "analysis_id"]
           },
           {
             foreignKeyName: "routes_org_id_fkey"

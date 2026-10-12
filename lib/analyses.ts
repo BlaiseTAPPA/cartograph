@@ -13,6 +13,8 @@ export type AnalysisSummary = {
   progress: Progress;
   /** Unfinished and unmoved for minutes, judged at the moment of the read. */
   stale: boolean;
+  /** The parser contract its stored rows were written under; null before versions were recorded. */
+  resultVersion: number | null;
 };
 
 // No organization filter in this file, on purpose. The policy on analyses
@@ -22,7 +24,7 @@ export type AnalysisSummary = {
 // patch with a where clause.
 
 const SUMMARY_COLUMNS =
-  "id, status, stage, stage_message, stage_changed_at, commit_sha, error, created_at, finished_at, project:projects!inner(repo_url)";
+  "id, status, stage, stage_message, stage_changed_at, commit_sha, error, created_at, finished_at, result_version, project:projects!inner(repo_url)";
 
 type SummaryRow = {
   id: string;
@@ -34,6 +36,7 @@ type SummaryRow = {
   error: string | null;
   created_at: string;
   finished_at: string | null;
+  result_version: number | null;
   project: { repo_url: string };
 };
 
@@ -54,6 +57,7 @@ function toSummary(row: SummaryRow, readAt: number): AnalysisSummary {
       at,
     },
     stale: isStale(row.status, at, readAt),
+    resultVersion: row.result_version,
   };
 }
 

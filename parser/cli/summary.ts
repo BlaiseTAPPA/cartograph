@@ -54,6 +54,17 @@ export function printSummary(r: ParseResult): void {
     () => "",
   );
 
+  const roles = new Map<string, number>();
+  for (const f of r.files) if (f.status === "parsed") roles.set(f.role ?? "(unclassified)", (roles.get(f.role ?? "(unclassified)") ?? 0) + 1);
+  console.log(`
+roles    ${[...roles].map(([role, n]) => `${role} ${n}`).join(", ")}`);
+  console.log(`routes   ${r.routes.length}`);
+  for (const route of r.routes) console.log(`           ${route.method.padEnd(7)} ${route.path}  ${route.file}:${route.line}`);
+  if (r.routeGaps.length > 0) {
+    console.log(`not shown ${r.routeGaps.length}`);
+    for (const g of r.routeGaps) console.log(`           ${g.file}${g.line === null ? "" : `:${g.line}`}  ${g.reason}`);
+  }
+
   if (r.coverage.configErrors.length > 0) {
     console.log(`\nconfig problems (resolution under these may be incomplete)`);
     for (const e of r.coverage.configErrors) console.log(`  ${e.config}: ${e.message}`);

@@ -1,4 +1,4 @@
-import { Node, Project, SyntaxKind, ts, type SourceFile } from "ts-morph";
+import { Node, SyntaxKind, type SourceFile } from "ts-morph";
 import type { EdgeKind } from "./types.ts";
 
 export type FoundImport = {
@@ -15,24 +15,7 @@ export type FoundImport = {
   mode: "file" | "esm" | "cjs";
 };
 
-// One in-memory project reused for every file. Nothing is type-checked and no
-// file is pulled in through its imports; we only want each file's syntax tree.
-const project = new Project({
-  useInMemoryFileSystem: true,
-  skipFileDependencyResolution: true,
-  compilerOptions: { allowJs: true, jsx: ts.JsxEmit.Preserve },
-});
-
-export function findImports(fileName: string, text: string): FoundImport[] {
-  const source = project.createSourceFile(fileName, text, { overwrite: true });
-  try {
-    return collect(source);
-  } finally {
-    project.removeSourceFile(source);
-  }
-}
-
-function collect(source: SourceFile): FoundImport[] {
+export function findImports(source: SourceFile): FoundImport[] {
   const found: FoundImport[] = [];
 
   for (const decl of source.getImportDeclarations()) {

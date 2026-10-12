@@ -1,4 +1,5 @@
 // Usage: node parser/cli/parse.ts <directory> [--out result.json]
+import { detectAdapter } from "../../frameworks/detect.ts";
 import { parseRepository } from "../index.ts";
 import { writeResult } from "../output.ts";
 import { printSummary } from "./summary.ts";
@@ -15,7 +16,7 @@ if (!directory || (outIndex !== -1 && !out)) {
 }
 
 const started = performance.now();
-const result = parseRepository(directory);
+const result = parseRepository(directory, detectAdapter(directory));
 const ms = Math.round(performance.now() - started);
 
 printSummary(result);

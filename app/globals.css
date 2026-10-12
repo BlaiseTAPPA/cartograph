@@ -14,13 +14,13 @@
   /* Edge direction, relative to whatever is selected. */
   --edge-in: #16a34a;
   --edge-out: #d97706;
-  /* File kinds. Kept clear of the accent blue and of the green and amber
-     reserved for edge direction. Unclassified has no hue at all. */
-  --kind-entry: #4f46e5;
-  --kind-test: #7c3aed;
-  --kind-story: #c026d3;
-  --kind-config: #0891b2;
-  --kind-script: #e11d48;
+  /* Role tiers: routable surfaces, the layers behind them, plumbing. Kept
+     clear of the accent blue and of the green and amber reserved for edge
+     direction. Support files use the muted text colour; unclassified has no
+     hue at all. */
+  --tier-surface: #4f46e5;
+  --tier-layer: #0891b2;
+  --tier-plumbing: #c026d3;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,11 +34,9 @@
     --accent: #4b8bf5;
     --edge-in: #4ade80;
     --edge-out: #fbbf24;
-    --kind-entry: #818cf8;
-    --kind-test: #a78bfa;
-    --kind-story: #e879f9;
-    --kind-config: #22d3ee;
-    --kind-script: #fb7185;
+    --tier-surface: #818cf8;
+    --tier-layer: #22d3ee;
+    --tier-plumbing: #e879f9;
   }
 }
 
@@ -52,11 +50,9 @@
   --accent: #4b8bf5;
   --edge-in: #4ade80;
   --edge-out: #fbbf24;
-  --kind-entry: #818cf8;
-  --kind-test: #a78bfa;
-  --kind-story: #e879f9;
-  --kind-config: #22d3ee;
-  --kind-script: #fb7185;
+  --tier-surface: #818cf8;
+  --tier-layer: #22d3ee;
+  --tier-plumbing: #e879f9;
 }
 
 @theme inline {
@@ -66,11 +62,9 @@
   --color-fg: var(--fg);
   --color-muted: var(--fg-muted);
   --color-accent: var(--accent);
-  --color-kind-entry: var(--kind-entry);
-  --color-kind-test: var(--kind-test);
-  --color-kind-story: var(--kind-story);
-  --color-kind-config: var(--kind-config);
-  --color-kind-script: var(--kind-script);
+  --color-tier-surface: var(--tier-surface);
+  --color-tier-layer: var(--tier-layer);
+  --color-tier-plumbing: var(--tier-plumbing);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
