@@ -1,10 +1,25 @@
 "use client";
 
-import { useActionState } from "react";
+import { startTransition, useActionState, useEffect, useRef } from "react";
 import { analyseRepository } from "../app/(workspace)/actions";
 
-export function AnalyseForm() {
+/**
+ * `startWith`: a URL carried in from the landing page through sign-in. It is
+ * submitted once on arrival, through the same action as a typed one, so a bad
+ * URL or a missing organization shows the same error in the same place.
+ */
+export function AnalyseForm({ startWith }: { startWith?: string }) {
   const [error, action, pending] = useActionState(analyseRepository, null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    // Effects run twice in development; the ref keeps it to one analysis.
+    if (!startWith || started.current) return;
+    started.current = true;
+    const form = new FormData();
+    form.set("url", startWith);
+    startTransition(() => action(form));
+  }, [startWith, action]);
 
   return (
     <form action={action} className="shrink-0 border-b border-line px-3 py-2 text-xs">
@@ -15,6 +30,7 @@ export function AnalyseForm() {
           required
           spellCheck={false}
           autoComplete="off"
+          defaultValue={startWith}
           placeholder="https://github.com/owner/repository"
           aria-label="Public GitHub repository URL"
           aria-invalid={error ? true : undefined}
