@@ -7,6 +7,7 @@ import { getStoredGraph } from "@/lib/stored-graph";
 import { adapterNamed } from "@/parser/adapter";
 import { AnalysisProgress, RerunButton } from "../../../../components/analysis-progress";
 import { CategoryRail } from "../../../../components/category-rail";
+import { CoverageBanner } from "../../../../components/coverage-banner";
 import { DetailPane } from "../../../../components/detail-pane";
 import { MapCanvas } from "../../../../components/map-canvas";
 import { MapShell } from "../../../../components/map-shell";
@@ -75,6 +76,7 @@ async function StoredMap({ analysis, repo }: { analysis: AnalysisSummary; repo: 
       <MapShell
         rail={<CategoryRail title={repo} subtitle={gitRef} counts={counts} skipped={graph.coverage.files.skipped} />}
         detail={<DetailPane repo={repo} gitRef={gitRef} coverage={graph.coverage} />}
+        banner={<CoverageBanner coverage={graph.coverage} />}
       >
         <MapCanvas />
       </MapShell>

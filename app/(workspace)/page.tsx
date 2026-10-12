@@ -3,7 +3,8 @@ import { Suspense } from "react";
 import { countAnalysesByStatus, listAnalyses, type AnalysisSummary } from "@/lib/analyses";
 import type { AnalysisStatus } from "@/lib/progress";
 import { AnalyseForm } from "../../components/analyse-form";
-import { ANALYSIS_COLUMNS, AnalysisRow } from "../../components/analysis-row";
+import { ANALYSIS_COLUMNS } from "@/lib/repo";
+import { AnalysisRow } from "../../components/analysis-row";
 import { StatusMark } from "../../components/status-mark";
 
 export default function WorkspacePage() {

@@ -46,14 +46,19 @@ const REPLAY_LIMIT = 25;
  * and nothing has to read the row again.
  */
 export function useProgress(analysisId: string, snapshot: Progress, live: boolean): Progress {
-  const { getToken } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const [received, setReceived] = useState<Progress | null>(null);
   const since = snapshot.at;
 
   useEffect(() => {
-    if (!live) return;
+    // Before Clerk has loaded, getToken returns null and the socket would
+    // join with the bare publishable key, which the channel policy refuses.
+    if (!live || !isLoaded || !isSignedIn) return;
     const supabase = browserSupabase(getToken);
-    const channel = supabase
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    const subscribe = () => supabase
       .channel(`analysis:${analysisId}`, {
         config: {
           private: true,
@@ -71,10 +76,26 @@ export function useProgress(analysisId: string, snapshot: Progress, live: boolea
           console.error(`Progress channel for ${analysisId}: ${status}`, err);
         }
       });
+
+    void (async () => {
+      const token = await getToken();
+      if (cancelled) return;
+      if (!token) {
+        console.error(`Progress channel for ${analysisId}: no session token, not subscribing.`);
+        return;
+      }
+      // Set before joining, so the join carries the session token rather
+      // than whatever the socket opened with.
+      await supabase.realtime.setAuth(token);
+      if (cancelled) return;
+      channel = subscribe();
+    })();
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) void supabase.removeChannel(channel);
     };
-  }, [analysisId, since, live, getToken]);
+  }, [analysisId, since, live, isLoaded, isSignedIn, getToken]);
 
   return newer(snapshot, received);
 }
