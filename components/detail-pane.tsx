@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { countByCategory } from "@/lib/categories";
+import { FRAMEWORK_LABEL, type Role } from "@/frameworks/taxonomy";
+import { countByRole } from "@/lib/categories";
 import { importedByNothing, mostDependedOn } from "@/lib/map/detail";
 import { INSIGHT_SENTENCES, type InsightFile } from "@/lib/map/insights";
 import { DEFAULT_DEPTH, walk, type Direction } from "@/lib/map/reach";
-import type { FileCategory } from "@/parser/adapter";
 import type { Coverage, ParsedFile } from "@/parser/types";
-import { SWATCH } from "./category-rail";
+import { roleLabel, roleSwatch } from "./category-rail";
 import { neighboursOf, useMapState } from "./map-state";
 
 // Long enough to show the shape of a repository, short enough to scan.
@@ -35,7 +35,18 @@ const DEPTHS = [1, 2, 3] as const;
  * With nothing selected it shows the repository summary: that is its resting
  * state, not a placeholder.
  */
-export function DetailPane({ repo, gitRef, coverage }: { repo: string; gitRef: string; coverage: Coverage }) {
+export function DetailPane({
+  repo,
+  gitRef,
+  coverage,
+  routes,
+}: {
+  repo: string;
+  gitRef: string;
+  coverage: Coverage;
+  /** Routes stored for this analysis: exact ones only. */
+  routes: number;
+}) {
   const { selected } = useMapState();
   // Held here, not per selection: whichever tab is open stays open as the
   // selection changes.
@@ -43,7 +54,7 @@ export function DetailPane({ repo, gitRef, coverage }: { repo: string; gitRef: s
   // Kept across selections too, so a walk can be compared file to file.
   const [walkState, setWalkState] = useState<WalkState>(null);
 
-  if (selected === null) return <Summary repo={repo} gitRef={gitRef} coverage={coverage} />;
+  if (selected === null) return <Summary repo={repo} gitRef={gitRef} coverage={coverage} routes={routes} />;
   if (selected.slot === null) {
     return (
       <Tabbed tab={tab} setTab={setTab} header={<FolderHeader dir={selected.node} />} what="folder">
@@ -100,13 +111,21 @@ function Tabbed({
   );
 }
 
-function Summary({ repo, gitRef, coverage }: { repo: string; gitRef: string; coverage: Coverage }) {
-  const { parsed, adapter } = useMapState();
+function Summary({
+  repo,
+  gitRef,
+  coverage,
+  routes,
+}: {
+  repo: string;
+  gitRef: string;
+  coverage: Coverage;
+  routes: number;
+}) {
+  const { parsed, framework } = useMapState();
   const ranked = mostDependedOn(parsed);
   const starts = importedByNothing(parsed);
-  const counts = countByCategory(parsed, adapter);
-  const unclassified = counts.find((c) => c.category === null)?.files ?? 0;
-  const entries = counts.find((c) => c.category === "entry")?.files ?? 0;
+  const unclassified = countByRole(parsed, framework).find((c) => c.role === null)?.files ?? 0;
 
   return (
     <div className="text-xs">
@@ -117,7 +136,7 @@ function Summary({ repo, gitRef, coverage }: { repo: string; gitRef: string; cov
         <span className="shrink-0 font-mono text-[11px] text-muted">{gitRef}</span>
       </div>
       <Facts>
-        <Fact label="Framework">{adapter.name === "none" ? "none detected" : adapter.name}</Fact>
+        <Fact label="Framework">{FRAMEWORK_LABEL[framework]}</Fact>
         <Fact label="Files">
           {coverage.files.parsed} parsed
           {coverage.files.skipped > 0 && <span className="text-muted">, {coverage.files.skipped} skipped</span>}
@@ -126,11 +145,9 @@ function Summary({ repo, gitRef, coverage }: { repo: string; gitRef: string; cov
           {coverage.imports.seen}
           <span className="text-muted">, {coverage.imports.resolved} to a file here</span>
         </Fact>
-        {/* Counted from Next.js file conventions matched by path: pages,
-            layouts and route handlers, the files a framework reaches by name. */}
-        <Fact label="Routes">
-          {entries} <span className="text-muted">pages, layouts and handlers</span>
-        </Fact>
+        {/* The route table's length: only routes whose method and full path
+            are both in the syntax. */}
+        <Fact label="Routes">{routes}</Fact>
         <Fact label="Unclassified">
           {unclassified} <span className="text-muted">files no convention identified</span>
         </Fact>
@@ -232,19 +249,19 @@ function FileStructure({
   walkState: WalkState;
   setWalkState: (w: WalkState) => void;
 }) {
-  const { fileInfo, neighbours, adapter } = useMapState();
+  const { fileInfo, neighbours, roleOf } = useMapState();
   const file = fileInfo.get(path);
   const { imports, importedBy } = neighboursOf(neighbours, path);
   if (!file) return null;
-  const category = adapter.categorize(path);
+  const role = roleOf(path);
 
   return (
     <div>
       <Facts>
         <Fact label="Kind">
           <span className="inline-flex items-center gap-1.5">
-            <Swatch category={category} />
-            {category ?? <span className="text-muted">unclassified</span>}
+            <Swatch role={role} />
+            {role === null ? <span className="text-muted">Unclassified</span> : roleLabel(role)}
           </span>
         </Fact>
         <Fact label="Lines">{file.lines}</Fact>
@@ -351,11 +368,11 @@ function FolderHeader({ dir }: { dir: string }) {
 }
 
 function FolderStructure({ dir }: { dir: string }) {
-  const { groups, fans, fileInfo, adapter } = useMapState();
+  const { groups, fans, fileInfo, framework } = useMapState();
   const group = groups.find((g) => g.dir === dir);
   if (!group) return null;
   const files = group.files.flatMap((p) => fileInfo.get(p) ?? []);
-  const kinds = countByCategory(files, adapter).filter((c) => c.files > 0);
+  const kinds = countByRole(files, framework).filter((c) => c.files > 0);
   const fan = fans.get(dir) ?? { fanIn: 0, fanOut: 0 };
 
   return (
@@ -371,10 +388,10 @@ function FolderStructure({ dir }: { dir: string }) {
       </Facts>
       <Section title="Kinds of file">
         <ul className="tabular-nums">
-          {kinds.map(({ category, files: n }) => (
-            <li key={category ?? "unclassified"} className="flex h-5 items-center gap-2 px-3">
-              <Swatch category={category} />
-              <span className={`flex-1 ${category === null ? "text-muted" : ""}`}>{category ?? "unclassified"}</span>
+          {kinds.map(({ role, files: n }) => (
+            <li key={role ?? "unclassified"} className="flex h-5 items-center gap-2 px-3">
+              <Swatch role={role} />
+              <span className={`flex-1 ${role === null ? "text-muted" : ""}`}>{roleLabel(role)}</span>
               <span>{n}</span>
             </li>
           ))}
@@ -454,7 +471,7 @@ function PathButton({
   direction?: "in" | "out" | "none";
   wrap?: boolean;
 }) {
-  const { selectFile, setHover, paneHovered, adapter } = useMapState();
+  const { selectFile, setHover, paneHovered, roleOf } = useMapState();
   const cut = path.lastIndexOf("/");
   const dir = cut === -1 ? "" : path.slice(0, cut + 1);
   const name = path.slice(cut + 1);
@@ -469,7 +486,7 @@ function PathButton({
       title={path}
       className={`flex w-full items-center gap-1.5 px-3 text-left font-mono text-[11px] ${wrap ? "py-0.5" : "h-5"} ${paneHovered(path) ? "bg-accent/15" : "hover:bg-surface"}`}
     >
-      <Swatch category={adapter.categorize(path)} />
+      <Swatch role={roleOf(path)} />
       {wrap ? (
         <span className="min-w-0 flex-1 break-all">
           <span className="text-muted">{dir}</span>
@@ -498,12 +515,12 @@ function PathButton({
   );
 }
 
-function Swatch({ category }: { category: FileCategory | null }) {
+function Swatch({ role }: { role: Role | null }) {
   // Unclassified gets an empty slot rather than a grey swatch: no colour, and
   // names still line up.
-  return category === null ? (
+  return role === null ? (
     <span className="size-2 shrink-0" aria-hidden="true" />
   ) : (
-    <span className={`size-2 shrink-0 rounded-sm ${SWATCH[category]}`} aria-hidden="true" />
+    <span className={`size-2 shrink-0 rounded-sm ${roleSwatch(role)}`} aria-hidden="true" />
   );
 }

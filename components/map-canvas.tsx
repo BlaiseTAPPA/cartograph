@@ -25,7 +25,7 @@ import {
   type PanelNode,
   WINDOW_ROWS,
 } from "@/lib/map/view";
-import { kindColour, SWATCH } from "./category-rail";
+import { roleColour, roleSwatch } from "./category-rail";
 import { useMapState } from "./map-state";
 
 const MIN_ZOOM = 0.1;
@@ -79,7 +79,7 @@ function FoldedNodeView({ data }: NodeProps<FoldedFlowNode>) {
         <span className="text-muted tabular-nums">{view.files}</span>
       ) : (
         <span className="tabular-nums" title={`${matched.files} of ${view.files} files match`}>
-          <span style={{ color: kindColour(filter.category) }}>{matched.files}</span>
+          <span style={{ color: roleColour(filter.role) }}>{matched.files}</span>
           <span className="text-muted">/{view.files}</span>
         </span>
       )}
@@ -112,7 +112,7 @@ function RowHandles({ index }: { index: number | "more" }) {
 }
 
 function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
-  const { close, select, scroll, adapter, selected, setHover, mapHovered, filter, matches } = useMapState();
+  const { close, select, scroll, roleOf, selected, setHover, mapHovered, filter, matches } = useMapState();
   // Wheel deltas arrive in pixels, often a few at a time from a trackpad.
   // They add up here and the window moves a row per row-height scrolled.
   const wheel = useRef(0);
@@ -145,7 +145,7 @@ function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
         <span className="flex items-baseline justify-between gap-2">
           <Fans fanIn={view.fanIn} fanOut={view.fanOut} />
           {matched !== null && filter !== null && (
-            <span className="tabular-nums" style={{ color: kindColour(filter.category) }}>
+            <span className="tabular-nums" style={{ color: roleColour(filter.role) }}>
               {matched.files} matched
             </span>
           )}
@@ -172,7 +172,7 @@ function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
         }}
       >
         {view.rows.map((row, i) => {
-          const category = adapter.categorize(row.path);
+          const role = roleOf(row.path);
           const isSelected = selected?.node === view.id && selected.slot === row.path;
           const endpoint: Endpoint = { node: view.id, slot: row.path };
           return (
@@ -192,10 +192,10 @@ function PanelNodeView({ data }: NodeProps<PanelFlowNode>) {
               title={row.path}
             >
               <RowHandles index={i} />
-              {category === null ? (
+              {role === null ? (
                 <span className="size-2 shrink-0" aria-hidden="true" />
               ) : (
-                <span className={`size-2 shrink-0 rounded-sm ${SWATCH[category]}`} aria-hidden="true" />
+                <span className={`size-2 shrink-0 rounded-sm ${roleSwatch(role)}`} aria-hidden="true" />
               )}
               <span className="min-w-0 flex-1 truncate font-mono">{row.label}</span>
               <Fans fanIn={row.fanIn} fanOut={row.fanOut} />

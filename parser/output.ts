@@ -13,6 +13,8 @@ import {
   type ImportRecord,
   type ParseResult,
   type RepoFile,
+  type Route,
+  type RouteGap,
 } from "./types.ts";
 
 export function writeResult(file: string, result: ParseResult): void {
@@ -62,6 +64,10 @@ function str(v: unknown, at: string): string {
   return v;
 }
 
+function strOrNull(v: unknown, at: string): string | null {
+  return v === null ? null : str(v, at);
+}
+
 function int(v: unknown, at: string): number {
   if (typeof v !== "number" || !Number.isInteger(v) || v < 0) throw new ShapeError(`${at}: expected count`);
   return v;
@@ -89,7 +95,40 @@ function toFile(v: unknown, at: string): RepoFile {
     hash: str(o.hash, `${at}.hash`),
     fanIn: int(o.fanIn, `${at}.fanIn`),
     fanOut: int(o.fanOut, `${at}.fanOut`),
+    role: strOrNull(o.role, `${at}.role`),
   };
+}
+
+function line(v: unknown, at: string): number {
+  const n = int(v, at);
+  if (n < 1) throw new ShapeError(`${at}: expected a line number`);
+  return n;
+}
+
+/** Checks a route read back from wherever it was stored. */
+export function toRoute(v: unknown, at: string): Route {
+  const o = obj(v, at);
+  return {
+    method: str(o.method, `${at}.method`),
+    path: str(o.path, `${at}.path`),
+    file: str(o.file, `${at}.file`),
+    line: line(o.line, `${at}.line`),
+  };
+}
+
+/** Checks a route gap read back from wherever it was stored. */
+export function toRouteGap(v: unknown, at: string): RouteGap {
+  const o = obj(v, at);
+  return {
+    file: str(o.file, `${at}.file`),
+    line: o.line === null ? null : line(o.line, `${at}.line`),
+    reason: str(o.reason, `${at}.reason`),
+  };
+}
+
+/** Checks a stored list of route gaps. */
+export function readRouteGaps(value: unknown): RouteGap[] {
+  return arr(value, "routeGaps").map((g, i) => toRouteGap(g, `routeGaps[${i}]`));
 }
 
 function toEdge(v: unknown, at: string): Edge {
@@ -209,6 +248,8 @@ function toResult(v: unknown): ParseResult {
     files: arr(o.files, "result.files").map((f, i) => toFile(f, `result.files[${i}]`)),
     edges: arr(o.edges, "result.edges").map((e, i) => toEdge(e, `result.edges[${i}]`)),
     imports: arr(o.imports, "result.imports").map((m, i) => toImport(m, `result.imports[${i}]`)),
+    routes: arr(o.routes, "result.routes").map((r, i) => toRoute(r, `result.routes[${i}]`)),
+    routeGaps: arr(o.routeGaps, "result.routeGaps").map((g, i) => toRouteGap(g, `result.routeGaps[${i}]`)),
     coverage: toCoverage(o.coverage, "result.coverage"),
   };
 }
@@ -222,6 +263,9 @@ function checkConsistency(r: ParseResult): void {
   for (const e of r.edges) {
     if (!parsed.has(e.from)) fail(`edge from ${e.from}, which is not a parsed file`);
     if (!parsed.has(e.to)) fail(`edge to ${e.to}, which is not a parsed file`);
+  }
+  for (const route of r.routes) {
+    if (!parsed.has(route.file)) fail(`route ${route.method} ${route.path} in ${route.file}, which is not a parsed file`);
   }
   const { files, imports } = r.coverage;
   if (files.found !== r.files.length) fail("files.found differs from the file list");

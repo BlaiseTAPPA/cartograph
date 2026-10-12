@@ -1,7 +1,7 @@
 // The shape the parser writes. Everything downstream reads this, so a change
 // here is a change to a contract: bump RESULT_VERSION when it changes.
 
-export const RESULT_VERSION = 1;
+export const RESULT_VERSION = 2;
 
 export const EDGE_KINDS = ["import", "re-export", "dynamic-import"] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
@@ -38,6 +38,8 @@ export type ParsedFile = {
   hash: string;
   fanIn: number;
   fanOut: number;
+  /** The adapter's name for what this file is, or null when no convention identifies it. */
+  role: string | null;
 };
 
 export type SkippedFile = {
@@ -102,6 +104,27 @@ export type Coverage = {
   configErrors: { config: string; message: string }[];
 };
 
+/**
+ * A route exactly as the syntax declares it, in the framework's own pattern
+ * notation. The method is the HTTP method, or "page" for a page, which answers
+ * to no method named in the code.
+ */
+export type Route = {
+  method: string;
+  path: string;
+  /** A parsed file. */
+  file: string;
+  line: number;
+};
+
+/** A route the code declares that couldn't be recovered exactly, and why. */
+export type RouteGap = {
+  file: string;
+  /** Null when the gap is about a whole file rather than one place in it. */
+  line: number | null;
+  reason: string;
+};
+
 export type ParseResult = {
   version: typeof RESULT_VERSION;
   /** Absolute path that was parsed. */
@@ -111,5 +134,7 @@ export type ParseResult = {
   /** Deduplicated on (from, to, kind). */
   edges: Edge[];
   imports: ImportRecord[];
+  routes: Route[];
+  routeGaps: RouteGap[];
   coverage: Coverage;
 };

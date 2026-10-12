@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { STALE_AFTER_MS, type Stage } from "../lib/progress.ts";
-import { fallbackAdapter, parseRepository, type ParseResult } from "../parser/index.ts";
+import { detectAdapter } from "../frameworks/detect.ts";
+import { parseRepository, type FrameworkAdapter, type ParseResult } from "../parser/index.ts";
 import { isSourcePath, walkRepository } from "../parser/walk.ts";
 import { createRunSupabase, type RunSupabase } from "./db.ts";
 import { fetchArchive, parseRepoUrl } from "./github.ts";
@@ -84,7 +85,15 @@ export async function runAnalysis(analysisId: string): Promise<void> {
   const claimed = must(
     await db
       .from("analyses")
-      .update({ status: "parsing", stage: "fetch", stage_message: "Starting", coverage: null, adapter: null })
+      .update({
+        status: "parsing",
+        stage: "fetch",
+        stage_message: "Starting",
+        coverage: null,
+        adapter: null,
+        route_gaps: null,
+        result_version: null,
+      })
       .eq("id", analysisId)
       .eq("status", "queued")
       .select("id, org_id, project:projects!inner(repo_url)")
@@ -116,17 +125,22 @@ export async function runAnalysis(analysisId: string): Promise<void> {
       await db.from("analyses").update({ commit_sha: unpacked.commitSha }).eq("id", analysisId).eq("org_id", orgId),
       "Recording the commit",
     );
-    failOnMissingSource(unpacked.unwritten);
-    const walk = walkRepository(workdir, fallbackAdapter);
+    const adapter = detectAdapter(workdir);
+    failOnMissingSource(unpacked.unwritten, adapter);
+    const walk = walkRepository(workdir, adapter);
 
     await setStage(
       "parse",
       `Resolving imports in ${walk.files.length} source files of ${unpacked.written}` +
-        (unpacked.unwritten.length > 0 ? `; ${unpacked.unwritten.length} archive entries not unpacked` : ""),
+        (unpacked.unwritten.length > 0 ? `; ${unpacked.unwritten.length} archive entries not unpacked` : "") +
+        (adapter.name === "none" ? "; no framework detected" : `; reading ${adapter.name} conventions`),
     );
-    const result = parseRepository(workdir, fallbackAdapter);
+    const result = parseRepository(workdir, adapter);
 
-    await setStage("store", `Writing ${result.files.length} files and ${result.edges.length} edges`);
+    await setStage(
+      "store",
+      `Writing ${result.files.length} files, ${result.edges.length} edges and ${result.routes.length} routes`,
+    );
     await store(db, orgId, analysisId, result);
 
     const { files, imports } = result.coverage;
@@ -138,6 +152,8 @@ export async function runAnalysis(analysisId: string): Promise<void> {
           finished_at: new Date().toISOString(),
           coverage: result.coverage,
           adapter: result.adapter,
+          route_gaps: result.routeGaps,
+          result_version: result.version,
           stage_message: `${files.parsed} files parsed, ${imports.resolved} of ${imports.seen} imports resolved to a file`,
         })
         .eq("id", analysisId)
@@ -164,13 +180,13 @@ export async function runAnalysis(analysisId: string): Promise<void> {
  * and wouldn't be, so that fails the run instead. Links are fine: the walk
  * doesn't follow them either.
  */
-function failOnMissingSource(unwritten: Unwritten[]): void {
+function failOnMissingSource(unwritten: Unwritten[], adapter: FrameworkAdapter): void {
   const missing = unwritten.filter(
     (u) =>
       u.reason !== "link" &&
       isSourcePath(u.path) &&
       !u.path.split("/").slice(0, -1).some((dir, i, dirs) =>
-        fallbackAdapter.ignoresDirectory(dir, dirs.slice(0, i + 1).join("/")),
+        adapter.ignoresDirectory(dir, dirs.slice(0, i + 1).join("/")),
       ),
   );
   if (missing.length === 0) return;
@@ -202,6 +218,7 @@ async function store(db: RunSupabase, orgId: string, analysisId: string, result:
       skip_reason: f.status === "skipped" ? f.reason : null,
       lines: f.status === "parsed" ? f.lines : null,
       hash: f.status === "parsed" ? f.hash : null,
+      role: f.status === "parsed" ? f.role : null,
     }));
     const stored = must(await db.from("files").insert(rows).select("id, path"), "Writing files");
     for (const row of stored) idByPath.set(row.path, row.id);
@@ -217,6 +234,16 @@ async function store(db: RunSupabase, orgId: string, analysisId: string, result:
   });
   for (let i = 0; i < edgeRows.length; i += EDGE_BATCH) {
     must(await db.from("edges").insert(edgeRows.slice(i, i + EDGE_BATCH)), "Writing edges");
+  }
+
+  // Routes go with their files too, so the delete above already cleared them.
+  const routeRows = result.routes.map((r) => {
+    const file = idByPath.get(r.file);
+    if (!file) throw new Error(`Route ${r.method} ${r.path} names ${r.file}, which wasn't stored.`);
+    return { org_id: orgId, analysis_id: analysisId, file_id: file, method: r.method, path: r.path, line: r.line };
+  });
+  for (let i = 0; i < routeRows.length; i += EDGE_BATCH) {
+    must(await db.from("routes").insert(routeRows.slice(i, i + EDGE_BATCH)), "Writing routes");
   }
 }
 

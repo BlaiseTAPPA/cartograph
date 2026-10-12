@@ -1,21 +1,31 @@
 "use client";
 
-import type { CategoryCount } from "@/lib/categories";
-import type { FileCategory } from "@/parser/adapter";
+import { ROLES, type Role, type Tier } from "@/frameworks/taxonomy";
+import type { RoleCount } from "@/lib/categories";
 import { useMapState } from "./map-state";
 
-// Literal class names so Tailwind sees them.
-export const SWATCH: Record<FileCategory, string> = {
-  entry: "bg-kind-entry",
-  test: "bg-kind-test",
-  story: "bg-kind-story",
-  config: "bg-kind-config",
-  script: "bg-kind-script",
+// Literal class names so Tailwind sees them. Colour is by tier: what a file
+// is shows in its name, how far from the surface it sits shows in its colour.
+const TIER_SWATCH: Record<Tier, string> = {
+  surface: "bg-tier-surface",
+  layer: "bg-tier-layer",
+  plumbing: "bg-tier-plumbing",
+  support: "bg-muted",
 };
 
+export function roleSwatch(role: Role): string {
+  return TIER_SWATCH[ROLES[role].tier];
+}
+
 /** The same colours as plain values, for text. Unclassified has none. */
-export function kindColour(category: FileCategory | null): string {
-  return category === null ? "var(--fg)" : `var(--kind-${category})`;
+export function roleColour(role: Role | null): string {
+  if (role === null) return "var(--fg)";
+  const tier = ROLES[role].tier;
+  return tier === "support" ? "var(--fg-muted)" : `var(--tier-${tier})`;
+}
+
+export function roleLabel(role: Role | null): string {
+  return role === null ? "Unclassified" : ROLES[role].label;
 }
 
 export function CategoryRail({
@@ -26,7 +36,7 @@ export function CategoryRail({
 }: {
   title: string;
   subtitle: string;
-  counts: CategoryCount[];
+  counts: RoleCount[];
   skipped: number;
 }) {
   const { filter, toggleFilter } = useMapState();
@@ -39,26 +49,26 @@ export function CategoryRail({
         <span className="shrink-0 font-mono text-[11px] text-muted">{subtitle}</span>
       </div>
       <ul className="py-1 tabular-nums">
-        {counts.map(({ category, files }) => {
-          const picked = filter !== null && filter.category === category;
+        {counts.map(({ role, files }) => {
+          const picked = filter !== null && filter.role === role;
           return (
-            <li key={category ?? "unclassified"}>
+            <li key={role ?? "unclassified"}>
               {/* Picking one dims what isn't in it on the map; picking it
                   again clears it. Nothing is removed. */}
               <button
                 type="button"
                 disabled={files === 0}
                 aria-pressed={picked}
-                onClick={() => toggleFilter(category)}
+                onClick={() => toggleFilter(role)}
                 className={`flex h-6 w-full items-center gap-2 px-3 text-left disabled:text-muted ${picked ? "bg-accent/15" : "enabled:hover:bg-surface"}`}
               >
-                {category === null ? (
+                {role === null ? (
                   // Unclassified has no colour, so its swatch is an outline.
                   <span className="size-2.5 shrink-0 rounded-sm border border-muted" aria-hidden="true" />
                 ) : (
-                  <span className={`size-2.5 shrink-0 rounded-sm ${SWATCH[category]}`} aria-hidden="true" />
+                  <span className={`size-2.5 shrink-0 rounded-sm ${roleSwatch(role)}`} aria-hidden="true" />
                 )}
-                <span className="flex-1">{category ?? "unclassified"}</span>
+                <span className="flex-1">{roleLabel(role)}</span>
                 <span>{files}</span>
               </button>
             </li>
