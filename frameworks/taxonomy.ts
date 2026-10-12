@@ -26,6 +26,7 @@ export const ROLES = {
   action: { label: "Server actions", tier: "surface", reachedByName: false },
   controller: { label: "Controllers", tier: "surface", reachedByName: false },
   resolver: { label: "Resolvers", tier: "surface", reachedByName: false },
+  router: { label: "Routers", tier: "surface", reachedByName: false },
   layout: { label: "Layouts", tier: "layer", reachedByName: true },
   boundary: { label: "Loading and error", tier: "layer", reachedByName: true },
   component: { label: "Components", tier: "layer", reachedByName: false },
@@ -33,6 +34,7 @@ export const ROLES = {
   service: { label: "Services", tier: "layer", reachedByName: false },
   module: { label: "Modules", tier: "layer", reachedByName: false },
   entity: { label: "Entities", tier: "layer", reachedByName: false },
+  model: { label: "Models", tier: "layer", reachedByName: false },
   dto: { label: "DTOs", tier: "layer", reachedByName: false },
   middleware: { label: "Middleware", tier: "plumbing", reachedByName: true },
   guard: { label: "Guards", tier: "plumbing", reachedByName: false },
@@ -84,13 +86,14 @@ export const FRAMEWORKS = {
     "config",
     "script",
   ],
+  express: ["router", "controller", "service", "model", "middleware", "test", "config", "script"],
   react: ["component", "hook", "story", "test", "config", "script"],
   none: ["story", "test", "config", "script"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Framework = keyof typeof FRAMEWORKS;
 
-const FRAMEWORK_NAMES: readonly Framework[] = ["nestjs", "nextjs", "react", "none"];
+const FRAMEWORK_NAMES: readonly Framework[] = ["nestjs", "nextjs", "express", "react", "none"];
 
 /** The framework a stored name refers to, or null when it names none of them. */
 export function frameworkNamed(name: string): Framework | null {
@@ -107,6 +110,7 @@ export function roleIn(framework: Framework, name: string): Role | null {
 export const FRAMEWORK_LABEL: Record<Framework, string> = {
   nestjs: "NestJS",
   nextjs: "Next.js",
+  express: "Express",
   react: "React",
   none: "none detected",
 };

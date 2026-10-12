@@ -97,15 +97,17 @@ export function hasDirective(source: SourceFile, directive: string): boolean {
 }
 
 /**
- * Names the file exports itself, with the line each is declared on. `star` is
- * true when it also re-exports everything from another file, whose names
- * can't be seen from here.
+ * Names the file exports itself, with the line each is declared on, by ESM
+ * syntax or CommonJS assignment. `star` is true when it also passes on names
+ * that can't be seen from here, such as everything another file exports.
  */
 export function exportedNames(source: SourceFile): { names: Map<string, number>; star: boolean } {
   const names = new Map<string, number>();
   let star = false;
   for (const statement of source.getStatements()) {
-    if (Node.isFunctionDeclaration(statement) || Node.isClassDeclaration(statement)) {
+    if (Node.isExpressionStatement(statement)) {
+      if (commonJsExports(statement.getExpression(), names)) star = true;
+    } else if (Node.isFunctionDeclaration(statement) || Node.isClassDeclaration(statement)) {
       const name = statement.getName();
       if (name && statement.hasExportKeyword() && !statement.hasDefaultKeyword()) {
         names.set(name, statement.getStartLineNumber());
@@ -132,6 +134,67 @@ export function exportedNames(source: SourceFile): { names: Map<string, number>;
     }
   }
   return { names, star };
+}
+
+/**
+ * Adds the names a top-level CommonJS assignment exports: `exports.a = …`,
+ * `module.exports.a = …`, `exports["a"] = …`, or `module.exports = { a, b }`.
+ * Assigning anything other than an object literal to `module.exports`
+ * exports no name. Returns true when the object has a spread or a computed
+ * key, whose names aren't in the syntax.
+ */
+function commonJsExports(expression: Node, names: Map<string, number>): boolean {
+  if (!Node.isBinaryExpression(expression)) return false;
+  if (expression.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) return false;
+  const target = expression.getLeft();
+  const line = expression.getStartLineNumber();
+
+  if (isModuleExports(target)) {
+    const value = expression.getRight();
+    if (!Node.isObjectLiteralExpression(value)) return false;
+    let hidden = false;
+    for (const property of value.getProperties()) {
+      if (Node.isSpreadAssignment(property)) {
+        hidden = true;
+        continue;
+      }
+      const nameNode = property.getNameNode();
+      if (Node.isIdentifier(nameNode)) names.set(nameNode.getText(), property.getStartLineNumber());
+      else if (Node.isStringLiteral(nameNode) || Node.isNumericLiteral(nameNode)) {
+        names.set(String(nameNode.getLiteralValue()), property.getStartLineNumber());
+      }
+      else hidden = true;
+    }
+    return hidden;
+  }
+
+  // One level below `exports` or `module.exports`, never deeper: `exports.a.b`
+  // is a property of an export, not an export.
+  let owner: Node;
+  let name: string | null;
+  if (Node.isPropertyAccessExpression(target)) {
+    owner = target.getExpression();
+    name = target.getName();
+  } else if (Node.isElementAccessExpression(target)) {
+    owner = target.getExpression();
+    name = literalString(target.getArgumentExpression());
+  } else {
+    return false;
+  }
+  const isExportsObject = (Node.isIdentifier(owner) && owner.getText() === "exports") || isModuleExports(owner);
+  if (!isExportsObject) return false;
+  if (name === null) return true;
+  names.set(name, line);
+  return false;
+}
+
+function isModuleExports(node: Node): boolean {
+  return (
+    Node.isPropertyAccessExpression(node) &&
+    node.getName() === "exports" &&
+    Node.isIdentifier(node.getExpression()) &&
+    node.getExpression().getText() === "module"
+  );
 }
 
 /** The line of the file's default export, or null when it has none. */

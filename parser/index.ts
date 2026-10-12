@@ -153,12 +153,14 @@ function buildCoverage(
     import: { seen: 0, resolved: 0 },
     "re-export": { seen: 0, resolved: 0 },
     "dynamic-import": { seen: 0, resolved: 0 },
+    require: { seen: 0, resolved: 0 },
   };
   const unresolvedBy: Coverage["imports"]["unresolvedBy"] = {
     "no-file-at-relative-path": 0,
     "no-file-at-alias-target": 0,
     "no-file-at-base-url-path": 0,
     "non-literal-dynamic-import": 0,
+    "non-literal-require": 0,
   };
   const excludedBy: Coverage["imports"]["excludedBy"] = {
     "target-skipped": 0,

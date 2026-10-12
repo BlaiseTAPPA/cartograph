@@ -1,5 +1,6 @@
 // What the detail pane lists. Pure, over the file list and the edge list.
 
+import type { Edge, EdgeKind } from "@/parser/types";
 import type { MapFile, MapInputEdge } from "./view.ts";
 
 export type Neighbours = { imports: string[]; importedBy: string[] };
@@ -28,6 +29,25 @@ export function indexNeighbours(edges: readonly MapInputEdge[]): Map<string, Nei
     });
   }
   return index;
+}
+
+/**
+ * How each file reaches each neighbour, keyed by edgeKey. A file can import
+ * and require the same neighbour: one neighbour, two kinds, in the parser's
+ * own kind order.
+ */
+export function indexEdgeKinds(edges: readonly Edge[], order: readonly EdgeKind[]): Map<string, EdgeKind[]> {
+  const index = new Map<string, Set<EdgeKind>>();
+  for (const e of edges) {
+    const key = edgeKey(e.from, e.to);
+    if (!index.has(key)) index.set(key, new Set());
+    index.get(key)?.add(e.kind);
+  }
+  return new Map([...index].map(([key, kinds]) => [key, order.filter((k) => kinds.has(k))]));
+}
+
+export function edgeKey(from: string, to: string): string {
+  return `${from}\u0000${to}`;
 }
 
 /** Files something imports, most imported first. */

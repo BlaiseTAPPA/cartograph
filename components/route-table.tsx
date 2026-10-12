@@ -16,6 +16,7 @@ function lineUrl(source: SourceLink, file: string, line: number | null): string 
 const EMPTY: Record<Framework, string> = {
   nestjs: "No controller declares a route that could be read exactly.",
   nextjs: "No page or route handler declares a route that could be read exactly.",
+  express: "Express assembles routes at runtime from routers, variables and middleware, so none can be read exactly from the code.",
   react: "React has no routing of its own, so there are no routes to read.",
   none: "No framework adapter matched this repository, so no routes are read.",
 };

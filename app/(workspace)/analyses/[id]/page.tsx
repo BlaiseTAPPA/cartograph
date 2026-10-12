@@ -49,8 +49,9 @@ async function Analysis({
   // One address for an analysis: its progress while it runs, its map once
   // stored. Completion re-renders this page, which is how a run lands on its map.
   const complete = analysis.progress.status === "complete";
-  // Stored before roles and routes were recorded. Its rows can't say what
-  // its files are, and guessing now would be inventing it: it needs a re-run.
+  // Stored under an earlier parser contract: before roles and routes, or
+  // before require() calls were read. Filling in what it didn't record would
+  // be inventing it: it needs a re-run.
   const current = analysis.resultVersion === RESULT_VERSION;
 
   return (
@@ -89,7 +90,7 @@ async function Analysis({
         <AnalysisProgress analysisId={analysis.id} snapshot={analysis.progress} staleAtRead={analysis.stale} />
       ) : !current ? (
         <div className="px-3 py-3 text-xs">
-          <p>This analysis was stored before file roles and routes were recorded.</p>
+          <p>This analysis was stored by an earlier version of the parser, which recorded less than this one.</p>
           <p className="mt-1 text-[11px] text-muted">Run it again to see them; nothing is filled in after the fact.</p>
         </div>
       ) : view === "routes" ? (
