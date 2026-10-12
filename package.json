@@ -9,14 +9,20 @@
     "lint": "eslint",
     "parse": "node parser/cli/parse.ts",
     "parse:read": "node parser/cli/read.ts",
-    "analyse": "node --env-file=.env.local pipeline/cli/analyse.ts"
+    "analyse": "node pipeline/cli/analyse.ts",
+    "eval:datasets": "node evals/cli/datasets.ts",
+    "eval:roles": "node evals/cli/roles.ts",
+    "eval:prompts": "node evals/cli/prompts.ts",
+    "eval:paths": "node evals/cli/paths.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.13",
     "@dagrejs/dagre": "^3.1.1",
     "@supabase/supabase-js": "^2.117.3",
     "@xyflow/react": "^12.12.0",
+    "langsmith": "^0.10.11",
     "next": "16.4.0",
+    "openai": "^7.32.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "ts-morph": "^28.0.0"

@@ -8,6 +8,7 @@ import { INSIGHT_SENTENCES, type InsightFile } from "@/lib/map/insights";
 import { DEFAULT_DEPTH, walk, type Direction } from "@/lib/map/reach";
 import type { Coverage, ParsedFile } from "@/parser/types";
 import { roleLabel, roleSwatch } from "./category-rail";
+import { Explanation, useExplanations, type Subject } from "./explanation";
 import { neighboursOf, useMapState } from "./map-state";
 
 // Long enough to show the shape of a repository, short enough to scan.
@@ -36,11 +37,13 @@ const DEPTHS = [1, 2, 3] as const;
  * state, not a placeholder.
  */
 export function DetailPane({
+  analysisId,
   repo,
   gitRef,
   coverage,
   routes,
 }: {
+  analysisId: string;
   repo: string;
   gitRef: string;
   coverage: Coverage;
@@ -53,17 +56,23 @@ export function DetailPane({
   const [tab, setTab] = useState<Tab>("structure");
   // Kept across selections too, so a walk can be compared file to file.
   const [walkState, setWalkState] = useState<WalkState>(null);
+  const { entryOf, request } = useExplanations(analysisId);
 
   if (selected === null) return <Summary repo={repo} gitRef={gitRef} coverage={coverage} routes={routes} />;
+  const subject: Subject =
+    selected.slot === null ? { kind: "folder", dir: selected.node } : { kind: "file", path: selected.slot };
+  const explanation = (
+    <Explanation analysisId={analysisId} subject={subject} entry={entryOf(subject)} request={request} />
+  );
   if (selected.slot === null) {
     return (
-      <Tabbed tab={tab} setTab={setTab} header={<FolderHeader dir={selected.node} />} what="folder">
+      <Tabbed tab={tab} setTab={setTab} header={<FolderHeader dir={selected.node} />} explanation={explanation}>
         <FolderStructure dir={selected.node} />
       </Tabbed>
     );
   }
   return (
-    <Tabbed tab={tab} setTab={setTab} header={<FileHeader path={selected.slot} />} what="file">
+    <Tabbed tab={tab} setTab={setTab} header={<FileHeader path={selected.slot} />} explanation={explanation}>
       <FileStructure path={selected.slot} walkState={walkState} setWalkState={setWalkState} />
     </Tabbed>
   );
@@ -73,13 +82,13 @@ function Tabbed({
   tab,
   setTab,
   header,
-  what,
+  explanation,
   children,
 }: {
   tab: Tab;
   setTab: (tab: Tab) => void;
   header: ReactNode;
-  what: "file" | "folder";
+  explanation: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -99,14 +108,7 @@ function Tabbed({
           </button>
         ))}
       </div>
-      {tab === "structure" ? (
-        children
-      ) : (
-        <div className="px-3 py-3">
-          <p>No explanation yet.</p>
-          <p className="mt-1 text-[11px] text-muted">Nothing has explained this {what} so far.</p>
-        </div>
-      )}
+      {tab === "structure" ? children : explanation}
     </div>
   );
 }
@@ -249,11 +251,12 @@ function FileStructure({
   walkState: WalkState;
   setWalkState: (w: WalkState) => void;
 }) {
-  const { fileInfo, neighbours, roleOf, kindsOf } = useMapState();
+  const { fileInfo, neighbours, roleOf, kindsOf, labelledByModel } = useMapState();
   const file = fileInfo.get(path);
   const { imports, importedBy } = neighboursOf(neighbours, path);
   if (!file) return null;
   const role = roleOf(path);
+  const byModel = labelledByModel(path);
 
   return (
     <div>
@@ -266,7 +269,16 @@ function FileStructure({
             <span className="font-mono">{extensionOf(path)}</span>
           </span>
         </Fact>
-        <Fact label="Role">{role === null ? <span className="text-muted">Unclassified</span> : roleLabel(role)}</Fact>
+        <Fact label="Role">
+          {role === null ? (
+            <span className="text-muted">Unclassified</span>
+          ) : (
+            <>
+              {roleLabel(role)}
+              {byModel && <span className="text-muted">, labelled by the model</span>}
+            </>
+          )}
+        </Fact>
         <Fact label="Folder">
           <span className="font-mono break-all">{file.module === "." ? "(root)" : file.module}</span>
         </Fact>
@@ -280,7 +292,8 @@ function FileStructure({
           <Files n={importedBy.length} colour="var(--edge-in)" />
         </Fact>
         <Fact label="Reached by">
-          {role === null ? (
+          {/* A model's label says what a file is, never how it is reached. */}
+          {role === null || byModel ? (
             <span className="text-muted">unknown, no convention identifies it</span>
           ) : ROLES[role].reachedByName ? (
             "the framework, by its name or place"

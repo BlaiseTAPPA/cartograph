@@ -58,3 +58,43 @@ export async function fetchArchive(repo: Repo): Promise<Buffer> {
   }
   return Buffer.concat(chunks);
 }
+
+/**
+ * A file's bytes at an exact commit, or null when the commit has no such file.
+ * Addressed by commit, never by branch: a commit's copy can't change and isn't
+ * served stale from a cache the way a branch's can.
+ */
+export async function fetchFileAt(repo: Repo, commit: string, path: string): Promise<Buffer | null> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  const url = `https://raw.githubusercontent.com/${repo.owner}/${repo.name}/${commit}/${encoded}`;
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (cause) {
+    throw new Error(`Could not reach GitHub: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`GitHub answered ${response.status} ${response.statusText} for ${path}.`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * The commit the default branch points at now. Read from git's own ref
+ * advertisement rather than the API, which allows 60 unauthenticated calls an
+ * hour; this is what `git ls-remote` reads.
+ */
+export async function headCommit(repo: Repo): Promise<string> {
+  const url = `https://github.com/${repo.owner}/${repo.name}.git/info/refs?service=git-upload-pack`;
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store", headers: { "Git-Protocol": "version=0" } });
+  } catch (cause) {
+    throw new Error(`Could not reach GitHub: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+  if (!response.ok) throw new Error(`GitHub answered ${response.status} ${response.statusText} for ${repo.owner}/${repo.name}'s refs.`);
+  // pkt-lines: a 4-hex length, then "<sha> HEAD\0capabilities" first among
+  // the refs when the repository has a default branch.
+  const match = /([0-9a-f]{40}) HEAD\0/.exec(await response.text());
+  if (!match) throw new Error(`${repo.owner}/${repo.name} advertises no HEAD commit.`);
+  return match[1];
+}

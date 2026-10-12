@@ -1,7 +1,6 @@
 "use client";
 
 import { ROLES, type Role, type Tier } from "@/frameworks/taxonomy";
-import type { RoleCount } from "@/lib/categories";
 import { useMapState } from "./map-state";
 
 // Literal class names so Tailwind sees them. Colour is by tier: what a file
@@ -31,15 +30,14 @@ export function roleLabel(role: Role | null): string {
 export function CategoryRail({
   title,
   subtitle,
-  counts,
   skipped,
 }: {
   title: string;
   subtitle: string;
-  counts: RoleCount[];
   skipped: number;
 }) {
-  const { filter, toggleFilter } = useMapState();
+  // From the map state, so a label given in this session is counted at once.
+  const { filter, toggleFilter, counts } = useMapState();
   return (
     <div className="flex flex-col text-xs">
       <div className="flex h-8 shrink-0 items-baseline gap-1.5 border-b border-line px-3 pt-2">

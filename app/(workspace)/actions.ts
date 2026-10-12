@@ -4,6 +4,9 @@ import { auth } from "@clerk/nextjs/server";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { MODELS, tracing, type Tracing } from "@/ai/client";
+import type { ClassifiableRole } from "@/frameworks/taxonomy";
+import { checkFreshness, explainStoredFile, explainStoredFolder, type Freshness } from "@/lib/explain";
 import { requeueAnalysis, runAnalysis, startAnalysis } from "@/pipeline/run";
 
 // The run happens after the response, in the same process. There is no queue:
@@ -53,4 +56,56 @@ export async function rerunAnalysis(analysisId: string): Promise<string | null> 
   runAfterResponse(analysisId);
   refresh();
   return null;
+}
+
+export type ExplainResult =
+  | {
+      ok: true;
+      body: string;
+      cached: boolean;
+      model: string;
+      tracing: Tracing;
+      /** Set for a file no convention named: what the model labelled it, if anything. */
+      label: { role: ClassifiableRole | null } | { error: string } | null;
+    }
+  | { ok: false; error: string };
+
+export async function explainFileAction(analysisId: string, path: string): Promise<ExplainResult> {
+  const { orgId } = await auth();
+  if (!orgId) return { ok: false, error: "No active organization." };
+  try {
+    const { answer, label } = await explainStoredFile(orgId, analysisId, path);
+    return {
+      ok: true,
+      body: answer.body,
+      cached: answer.cached,
+      model: MODELS.explain,
+      tracing: tracing(),
+      label: label === null ? null : "error" in label ? { error: label.error } : { role: label.role },
+    };
+  } catch (cause) {
+    return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
+  }
+}
+
+export async function explainFolderAction(analysisId: string, dir: string): Promise<ExplainResult> {
+  const { orgId } = await auth();
+  if (!orgId) return { ok: false, error: "No active organization." };
+  try {
+    const answer = await explainStoredFolder(orgId, analysisId, dir);
+    return { ok: true, body: answer.body, cached: answer.cached, model: MODELS.explain, tracing: tracing(), label: null };
+  } catch (cause) {
+    return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
+  }
+}
+
+export type FreshnessResult = { ok: true; freshness: Freshness } | { ok: false; error: string };
+
+/** `path` is null for a folder, which is checked by commit only. */
+export async function checkFreshnessAction(analysisId: string, path: string | null): Promise<FreshnessResult> {
+  try {
+    return { ok: true, freshness: await checkFreshness(analysisId, path) };
+  } catch (cause) {
+    return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
+  }
 }

@@ -17,6 +17,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_cache: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          key: string
+          model: string
+          org_id: string
+          task: Database["public"]["Enums"]["ai_task"]
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          key: string
+          model: string
+          org_id: string
+          task: Database["public"]["Enums"]["ai_task"]
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          key?: string
+          model?: string
+          org_id?: string
+          task?: Database["public"]["Enums"]["ai_task"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_cache_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analyses: {
         Row: {
           adapter: string | null
@@ -227,6 +265,7 @@ export type Database = {
           org_id: string
           path: string
           role: string | null
+          role_from_model: boolean
           skip_reason: string | null
         }
         Insert: {
@@ -238,6 +277,7 @@ export type Database = {
           org_id: string
           path: string
           role?: string | null
+          role_from_model?: boolean
           skip_reason?: string | null
         }
         Update: {
@@ -249,6 +289,7 @@ export type Database = {
           org_id?: string
           path?: string
           role?: string | null
+          role_from_model?: boolean
           skip_reason?: string | null
         }
         Relationships: [
@@ -418,6 +459,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      ai_task: "explain-file" | "explain-folder" | "classify"
       analysis_stage: "fetch" | "select" | "parse" | "store"
       analysis_status: "queued" | "parsing" | "complete" | "failed"
       edge_kind: "import" | "re-export" | "dynamic-import" | "require"
