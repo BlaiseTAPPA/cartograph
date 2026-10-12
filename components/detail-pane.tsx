@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { FRAMEWORK_LABEL, type Role } from "@/frameworks/taxonomy";
+import { FRAMEWORK_LABEL, ROLES, type Role } from "@/frameworks/taxonomy";
 import { countByRole } from "@/lib/categories";
 import { importedByNothing, mostDependedOn } from "@/lib/map/detail";
 import { INSIGHT_SENTENCES, type InsightFile } from "@/lib/map/insights";
@@ -249,7 +249,7 @@ function FileStructure({
   walkState: WalkState;
   setWalkState: (w: WalkState) => void;
 }) {
-  const { fileInfo, neighbours, roleOf } = useMapState();
+  const { fileInfo, neighbours, roleOf, kindsOf } = useMapState();
   const file = fileInfo.get(path);
   const { imports, importedBy } = neighboursOf(neighbours, path);
   if (!file) return null;
@@ -258,30 +258,70 @@ function FileStructure({
   return (
     <div>
       <Facts>
+        {/* The swatch is the role's tier colour, the same square the rail
+            and the map use; the extension is plain text, not a second hue. */}
         <Fact label="Kind">
           <span className="inline-flex items-center gap-1.5">
             <Swatch role={role} />
-            {role === null ? <span className="text-muted">Unclassified</span> : roleLabel(role)}
+            <span className="font-mono">{extensionOf(path)}</span>
           </span>
         </Fact>
-        <Fact label="Lines">{file.lines}</Fact>
-        <Fact label="Imports">
-          <Out n={imports.length} />
+        <Fact label="Role">{role === null ? <span className="text-muted">Unclassified</span> : roleLabel(role)}</Fact>
+        <Fact label="Folder">
+          <span className="font-mono break-all">{file.module === "." ? "(root)" : file.module}</span>
         </Fact>
-        <Fact label="Imported by">
-          <In n={importedBy.length} />
+        <Fact label="Length">
+          {file.lines} line{file.lines === 1 ? "" : "s"}
+        </Fact>
+        <Fact label="Depends on">
+          <Files n={imports.length} colour="var(--edge-out)" />
+        </Fact>
+        <Fact label="Depended on by">
+          <Files n={importedBy.length} colour="var(--edge-in)" />
+        </Fact>
+        <Fact label="Reached by">
+          {role === null ? (
+            <span className="text-muted">unknown, no convention identifies it</span>
+          ) : ROLES[role].reachedByName ? (
+            "the framework, by its name or place"
+          ) : (
+            "imports only"
+          )}
         </Fact>
       </Facts>
       <WalkControls walkState={walkState} setWalkState={setWalkState} />
       {walkState && <WalkResult path={path} walkState={walkState} />}
       {/* Counts above are the lengths of these lists, so they always agree. */}
-      <Section title={`Imports, ${imports.length}`}>
-        <PathList paths={imports.flatMap((p) => fileInfo.get(p) ?? [])} />
+      <Section title="Imports" count={<Out n={imports.length} />}>
+        <PathList
+          paths={imports.flatMap((p) => fileInfo.get(p) ?? [])}
+          note={(f) => kindsOf(path, f.path).join(", ")}
+        />
       </Section>
-      <Section title={`Imported by, ${importedBy.length}`}>
-        <PathList paths={importedBy.flatMap((p) => fileInfo.get(p) ?? [])} />
+      <Section title="Imported by" count={<In n={importedBy.length} />}>
+        <PathList
+          paths={importedBy.flatMap((p) => fileInfo.get(p) ?? [])}
+          note={(f) => kindsOf(f.path, path).join(", ")}
+        />
       </Section>
     </div>
+  );
+}
+
+/** `.js` for `src/a.model.js`: what the file is written in, read off its name. */
+function extensionOf(path: string): string {
+  return /\.[^./]+$/.exec(path)?.[0] ?? "";
+}
+
+/** A count of files in the colour of the edge direction it counts. */
+function Files({ n, colour }: { n: number; colour: string }) {
+  return (
+    <>
+      <span className="tabular-nums" style={{ color: colour }}>
+        {n}
+      </span>{" "}
+      file{n === 1 ? "" : "s"}
+    </>
   );
 }
 
@@ -402,7 +442,7 @@ function FolderStructure({ dir }: { dir: string }) {
 }
 
 function Facts({ children }: { children: ReactNode }) {
-  return <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-y-1 px-3 py-2 tabular-nums">{children}</dl>;
+  return <dl className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-y-1 px-3 py-2 tabular-nums">{children}</dl>;
 }
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -414,12 +454,23 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
+function Section({
+  title,
+  note,
+  count,
+  children,
+}: {
+  title: string;
+  note?: string;
+  count?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section className="border-t border-line pb-1">
       <h2 className="flex items-baseline justify-between px-3 pt-2 pb-1 text-[11px] text-muted">
         <span>{title}</span>
         {note && <span>{note}</span>}
+        {count}
       </h2>
       {children}
     </section>
@@ -439,17 +490,20 @@ function PathList({
   paths,
   figure,
   direction,
+  note,
 }: {
   paths: ParsedFile[];
   figure?: (f: ParsedFile) => number;
   direction?: "in" | "out" | "none";
+  /** Plain text at the row's end, such as how the file is reached. */
+  note?: (f: ParsedFile) => string;
 }) {
   if (paths.length === 0) return <p className="px-3 py-0.5 text-muted">None.</p>;
   return (
     <ul>
       {paths.map((f) => (
         <li key={f.path}>
-          <PathButton path={f.path} figure={figure?.(f)} direction={direction} />
+          <PathButton path={f.path} figure={figure?.(f)} direction={direction} note={note?.(f)} />
         </li>
       ))}
     </ul>
@@ -465,11 +519,13 @@ function PathButton({
   figure,
   direction = "in",
   wrap = false,
+  note,
 }: {
   path: string;
   figure?: number;
   direction?: "in" | "out" | "none";
   wrap?: boolean;
+  note?: string;
 }) {
   const { selectFile, setHover, paneHovered, roleOf } = useMapState();
   const cut = path.lastIndexOf("/");
@@ -499,6 +555,7 @@ function PathButton({
           <span className="shrink-0">{name}</span>
         </span>
       )}
+      {note && <span className="shrink-0 font-sans text-muted">{note}</span>}
       {figure !== undefined && (
         <span className="shrink-0 font-sans">
           {direction === "in" ? (

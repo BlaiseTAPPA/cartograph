@@ -1,9 +1,9 @@
 // The shape the parser writes. Everything downstream reads this, so a change
 // here is a change to a contract: bump RESULT_VERSION when it changes.
 
-export const RESULT_VERSION = 2;
+export const RESULT_VERSION = 3;
 
-export const EDGE_KINDS = ["import", "re-export", "dynamic-import"] as const;
+export const EDGE_KINDS = ["import", "re-export", "dynamic-import", "require"] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
 export const SKIP_REASONS = ["declaration-file", "too-large", "unreadable"] as const;
@@ -14,6 +14,7 @@ export const UNRESOLVED_REASONS = [
   "no-file-at-alias-target",
   "no-file-at-base-url-path",
   "non-literal-dynamic-import",
+  "non-literal-require",
 ] as const;
 export type UnresolvedReason = (typeof UNRESOLVED_REASONS)[number];
 
@@ -74,7 +75,7 @@ export type ImportOutcome =
 /** Every import the parser saw, whatever happened to it. */
 export type ImportRecord = {
   from: string;
-  /** The literal string, or the argument's source text for a non-literal dynamic import. */
+  /** The literal string, or the argument's source text for a non-literal dynamic import or require. */
   specifier: string;
   kind: EdgeKind;
   line: number;

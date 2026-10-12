@@ -7,6 +7,7 @@ const UNRESOLVED_TEXT: Record<UnresolvedReason, string> = {
   "no-file-at-alias-target": "path alias matched, but no file at its target",
   "no-file-at-base-url-path": "baseUrl path points at no file",
   "non-literal-dynamic-import": "dynamic import argument is not a string literal",
+  "non-literal-require": "require() argument is not a string literal",
 };
 
 export function printSummary(r: ParseResult): void {

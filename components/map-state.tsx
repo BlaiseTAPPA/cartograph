@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { indexNeighbours, type Neighbours } from "@/lib/map/detail";
+import { edgeKey, indexEdgeKinds, indexNeighbours, type Neighbours } from "@/lib/map/detail";
 import { fold, type FoldedGroup } from "@/lib/map/fold";
 import { findInsights, type Insights } from "@/lib/map/insights";
 import {
@@ -16,7 +16,7 @@ import {
   type MapView,
 } from "@/lib/map/view";
 import { ROLES, roleIn, type Framework, type Role } from "@/frameworks/taxonomy";
-import type { Edge, ParsedFile, RepoFile } from "@/parser/types";
+import { EDGE_KINDS, type Edge, type EdgeKind, type ParsedFile, type RepoFile } from "@/parser/types";
 
 /**
  * Hovering one side lights the other. From the pane it's a file; from the map
@@ -41,6 +41,8 @@ type MapState = {
   groups: FoldedGroup[];
   fans: ReadonlyMap<string, { fanIn: number; fanOut: number }>;
   neighbours: ReadonlyMap<string, Neighbours>;
+  /** How `from` reaches `to`: import, require and so on. Empty when it doesn't. */
+  kindsOf: (from: string, to: string) => readonly EdgeKind[];
   view: MapView;
   insights: Insights;
   /** Each file's stored role. null is unclassified. */
@@ -95,6 +97,7 @@ export function MapStateProvider({
   const folding = useMemo(() => fold(parsed), [parsed]);
   const fans = useMemo(() => folderFans(folding.groups, edges), [folding, edges]);
   const neighbours = useMemo(() => indexNeighbours(edges), [edges]);
+  const edgeKinds = useMemo(() => indexEdgeKinds(edges, EDGE_KINDS), [edges]);
   const groupOf = useMemo(() => {
     const m = new Map<string, FoldedGroup>();
     for (const g of folding.groups) for (const f of g.files) m.set(f, g);
@@ -140,6 +143,7 @@ export function MapStateProvider({
       groups: folding.groups,
       fans,
       neighbours,
+      kindsOf: (from, to) => edgeKinds.get(edgeKey(from, to)) ?? [],
       view,
       insights,
       roleOf: (path) => roles.get(path) ?? null,
@@ -220,6 +224,7 @@ export function MapStateProvider({
     folding,
     fans,
     neighbours,
+    edgeKinds,
     view,
     insights,
     roles,

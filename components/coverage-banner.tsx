@@ -9,6 +9,7 @@ const REASON: Record<UnresolvedReason, string> = {
   "no-file-at-alias-target": "no file where a path alias points",
   "no-file-at-base-url-path": "no file under the base URL",
   "non-literal-dynamic-import": "dynamic import of a computed path",
+  "non-literal-require": "require() of a computed path",
 };
 
 /**

@@ -1,5 +1,6 @@
 import type { FrameworkAdapter } from "../parser/adapter.ts";
 import { walkRepository } from "../parser/walk.ts";
+import { EXPRESS_DEPENDENCY, expressAdapter } from "./express.ts";
 import { genericAdapter } from "./generic.ts";
 import { NESTJS_DEPENDENCY, nestjsAdapter } from "./nestjs.ts";
 import { NEXTJS_DEPENDENCY, nextjsAdapter } from "./nextjs.ts";
@@ -15,7 +16,9 @@ type Detector = {
 /**
  * Fixed order, first match wins. A NestJS backend usually ships beside a
  * frontend, and Next.js always depends on React, so the more specific
- * framework is asked first.
+ * framework is asked first. NestJS and Next.js can both run on Express, so
+ * Express comes after them; an Express server beside a React client is
+ * read as the server, since that's where its roles come from.
  */
 const DETECTORS: readonly Detector[] = [
   {
@@ -24,6 +27,7 @@ const DETECTORS: readonly Detector[] = [
       nestjsAdapter(root, apps, walkRepository(root, genericAdapter).files.map((f) => f.path)),
   },
   { dependency: NEXTJS_DEPENDENCY, build: (root, apps) => nextjsAdapter(root, apps) },
+  { dependency: EXPRESS_DEPENDENCY, build: (_root, apps) => expressAdapter(apps) },
   { dependency: "react", build: () => reactAdapter },
 ];
 

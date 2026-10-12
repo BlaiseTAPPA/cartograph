@@ -55,7 +55,10 @@ export class Resolver {
 
   resolve(found: FoundImport, fromRelative: string): ImportOutcome {
     if (found.specifier === null) {
-      return { status: "unresolved", reason: "non-literal-dynamic-import" };
+      return {
+        status: "unresolved",
+        reason: found.kind === "require" ? "non-literal-require" : "non-literal-dynamic-import",
+      };
     }
     const spec = found.specifier;
     const fromAbs = path.join(this.root, fromRelative);

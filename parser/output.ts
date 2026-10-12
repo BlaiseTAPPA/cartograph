@@ -210,12 +210,14 @@ function toCoverage(v: unknown, at: string): Coverage {
         import: kindCounts("import"),
         "re-export": kindCounts("re-export"),
         "dynamic-import": kindCounts("dynamic-import"),
+        require: kindCounts("require"),
       },
       unresolvedBy: {
         "no-file-at-relative-path": int(unresolvedBy["no-file-at-relative-path"], `${at}.imports.unresolvedBy.no-file-at-relative-path`),
         "no-file-at-alias-target": int(unresolvedBy["no-file-at-alias-target"], `${at}.imports.unresolvedBy.no-file-at-alias-target`),
         "no-file-at-base-url-path": int(unresolvedBy["no-file-at-base-url-path"], `${at}.imports.unresolvedBy.no-file-at-base-url-path`),
         "non-literal-dynamic-import": int(unresolvedBy["non-literal-dynamic-import"], `${at}.imports.unresolvedBy.non-literal-dynamic-import`),
+        "non-literal-require": int(unresolvedBy["non-literal-require"], `${at}.imports.unresolvedBy.non-literal-require`),
       },
       excludedBy: {
         "target-skipped": int(excludedBy["target-skipped"], `${at}.imports.excludedBy.target-skipped`),
